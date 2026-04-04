@@ -28,15 +28,15 @@ python prova_tecnica/01_teste_certificado.py --pfx "D:\meu_certificado.pfx" --se
 ```
 
 **Passo 2: Investigando comportamento da Distribuição NF-e (02)**
-Utiliza um NSU nulo (Zero) e extrai a massa estática para verificar se você já tem acesso ao `procNFe` (livre) ou apenas o maldoso espelho `resNFe`.
+Utiliza um NSU nulo (Zero) na fila da Fazenda. Use `producao` e forneça exatamente 14 dígitos (somente números) no `cnpj-base` para validarmos as notas ativas do dia.
 ```cmd
-python prova_tecnica/02_teste_nfe.py --pfx "D:\meu_certificado.pfx" --senha "123456" --uf-autor "35" --cnpj-base "12345678000199" --ambiente homologacao --salvar-exemplo-dir "./xmls_testes"
+python prova_tecnica/02_teste_nfe.py --pfx "D:\meu_certificado.pfx" --senha "123456" --uf-autor "35" --cnpj-base "12345678000199" --ambiente producao --salvar-exemplo-dir "./xmls_testes"
 ```
 
 **Passo 3: Misto/Desfecho das limitações do CT-e Isolado (03)**
-Bate via `consChCTe` limitando a chamada pra checar se a sua sefaz retorna Schema Inválido ou entrega o frete pronto na mão.
+Utilize uma chave real contendo exatamente 44 dígitos, buscando contra o banco de `producao` oficial.
 ```cmd
-python prova_tecnica/03_teste_cte.py --pfx "D:\meu_certificado.pfx" --senha "123456" --chave-cte "3523XXXXXXXXXXXXXXXXXXXXXXXXX" --ambiente homologacao --salvar-exemplo-dir "./xmls_testes"
+python prova_tecnica/03_teste_cte.py --pfx "D:\meu_certificado.pfx" --senha "123456" --chave-cte "35230000000000000000000000000000000000000000" --ambiente producao --salvar-exemplo-dir "./xmls_testes"
 ```
 
 ## Explicando a Árvore de Decisão Rumo ao MVP 1

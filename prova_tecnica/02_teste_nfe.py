@@ -76,14 +76,19 @@ def main():
     parser.add_argument("--pfx", required=True, help="Caminho relativo/absoluto PFX")
     parser.add_argument("--senha", required=True, help="Senha")
     parser.add_argument("--uf-autor", required=True, help="Código IBGE UF Solicitante (Ex: 35)")
-    parser.add_argument("--ambiente", default="homologacao", choices=["homologacao", "producao"])
-    parser.add_argument("--cnpj-base", required=True, help="CNPJ puro de 14 dígitos sem formatação")
+    parser.add_argument("--ambiente", default="producao", choices=["homologacao", "producao"], help="Use producao para ter volume de notas real de terceiros.")
+    parser.add_argument("--cnpj-base", required=True, help="CNPJ puro (Exato 14 dígitos numéricos)")
     parser.add_argument("--salvar-exemplo-dir", default=None, help="Pasta para depósito de XML full extraído puramente.")
     args = parser.parse_args()
     
     validado = []
     falhou = []
     
+    if len(args.cnpj_base) != 14 or not args.cnpj_base.isdigit():
+        falhou.append(f"CNPJ inserido inválido: '{args.cnpj_base}'.")
+        helpers.print_relatorio("FALHA DE PARÂMETRO", validado, falhou, "O CNPJ na distribuição precisa ter exatamente 14 numerais limpos/sem máscaras.")
+        sys.exit(1)
+
     if not os.path.isfile(args.pfx):
         falhou.append(f"Caminho PFX estritamente não encontrado: {args.pfx}")
         helpers.print_relatorio("FALHA DE OPERAÇÃO", validado, falhou, "Mova o arquivo ou reordene o caminho indicado.")

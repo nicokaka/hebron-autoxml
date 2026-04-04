@@ -62,7 +62,7 @@ def main():
     parser.add_argument("--pfx", required=True, help="Caminho para o arquivo .pfx")
     parser.add_argument("--senha", required=True, help="Senha")
     parser.add_argument("--chave-cte", required=True, help="Chave CT-e exata de 44 dígitos apenas números")
-    parser.add_argument("--ambiente", default="homologacao", choices=["homologacao", "producao"])
+    parser.add_argument("--ambiente", default="producao", choices=["homologacao", "producao"], help="Use producao para testar chaves CTe reais.")
     parser.add_argument("--salvar-exemplo-dir", default=None, help="Pasta para salvar extração do XML")
     args = parser.parse_args()
     
