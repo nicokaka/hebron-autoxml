@@ -109,23 +109,24 @@ class HebronApp(ctk.CTk):
             self.output_path.set(pth)
             
     def iniciar_processamento(self):
-        # Validações primárias
         if not self.excel_path.get() or not self.xml_base_path.get() or not self.output_path.get():
-            self.lbl_status.configure(text="STATUS: Preencha todos os três diretórios antes de continuar.", text_color="#ff4444")
+            self.mostrar_erro_validacao("STATUS: Preencha todos os três diretórios antes de continuar.")
             return
             
-        # Oculta botão de pasta anterior caso estivesse visível
-        self.btn_abrir_pasta.pack_forget()
+        self.bloquear_ui_processando()
         
-        # Trava UI
-        self.btn_processar.configure(state="disabled", text="MASTIGANDO... AGUARDE")
-        self.lbl_status.configure(text="STATUS: Fazendo Parsing e Varrendo a Nuvem Local... O tempo depende dos XMLs.", text_color="#ffd700")
-        
-        # Levanta Thread limpa
         t = threading.Thread(target=self._task_processar)
         t.daemon = True
         t.start()
         
+    def mostrar_erro_validacao(self, mensagem):
+        self.lbl_status.configure(text=mensagem, text_color="#ff4444")
+        
+    def bloquear_ui_processando(self):
+        self.btn_abrir_pasta.pack_forget()
+        self.btn_processar.configure(state="disabled", text="MASTIGANDO... AGUARDE")
+        self.lbl_status.configure(text="STATUS: Fazendo Parsing e Varrendo a Nuvem Local... O tempo depende dos XMLs.", text_color="#ffd700")
+
     def _task_processar(self):
         try:
             resultado = iniciar_extracao_hibrida(
@@ -133,13 +134,17 @@ class HebronApp(ctk.CTk):
                 self.xml_base_path.get(),
                 self.output_path.get()
             )
-            self._on_sucesso(resultado)
+            self._agendar_ui_update(lambda: self._on_sucesso(resultado))
             
         except Exception as e:
-            self._on_erro(str(e))
+            msg_str = str(e)
+            self._agendar_ui_update(lambda: self._on_erro(msg_str))
+            
+    def _agendar_ui_update(self, callback):
+        """Agendador cross-thread. Será interceptado (mockado) nos testes p/ execução síncrona."""
+        self.after(0, callback)
             
     def _on_sucesso(self, res: dict):
-        # Transição de Thread segurda pro Tkinter
         self.ultima_pasta_gerada = res['diretorio_saida']
         
         faltantes = res['total_unicas'] - res['total_encontradas']
@@ -151,21 +156,14 @@ class HebronApp(ctk.CTk):
             f"Buscadas: {res['total_unicas']} | Encontradas: {res['total_encontradas']} | Faltantes: {faltantes}"
         )
         
-        def ui_update():
-            self.lbl_status.configure(text=msg_resumo, text_color="#00aa00")
-            self.btn_processar.configure(state="normal", text="PROCESSAR NOVAMENTE")
-            self.btn_abrir_pasta.pack(pady=(10, 0))
-            # Mostra o Popup simples estipulado
-            messagebox.showinfo("Sucesso", "Pipeline finalizado! O ZIP e a Planilha nova já foram soltos na pasta.")
-            
-        self.after(0, ui_update)
+        self.lbl_status.configure(text=msg_resumo, text_color="#00aa00")
+        self.btn_processar.configure(state="normal", text="PROCESSAR NOVAMENTE")
+        self.btn_abrir_pasta.pack(pady=(10, 0))
+        messagebox.showinfo("Sucesso", "Pipeline finalizado! O ZIP e a Planilha nova já foram soltos na pasta.")
         
     def _on_erro(self, msg_erro: str):
-        def ui_update():
-            self.lbl_status.configure(text=f"STATUS: ERRO FATAL - {msg_erro}", text_color="#ff4444")
-            self.btn_processar.configure(state="normal", text="TENTAR DE NOVO")
-            
-        self.after(0, ui_update)
+        self.lbl_status.configure(text=f"STATUS: ERRO FATAL - {msg_erro}", text_color="#ff4444")
+        self.btn_processar.configure(state="normal", text="TENTAR DE NOVO")
 
     def abrir_pasta_saida(self):
         if self.ultima_pasta_gerada and os.path.isdir(self.ultima_pasta_gerada):
