@@ -44,7 +44,7 @@ class HebronApp(ctk.CTk):
         row_excel.grid(row=1, column=0, sticky="ew", pady=(0, 15))
         row_excel.columnconfigure(0, weight=1)
         
-        entry_excel = ctk.CTkEntry(row_excel, textvariable=self.excel_path, state="disabled", width=450)
+        entry_excel = ctk.CTkEntry(row_excel, textvariable=self.excel_path, width=450)
         entry_excel.grid(row=0, column=0, sticky="ew", padx=(0, 10))
         
         btn_excel = ctk.CTkButton(row_excel, text="Procurar...", width=100, command=self.buscar_excel)
@@ -58,7 +58,7 @@ class HebronApp(ctk.CTk):
         row_xml.grid(row=3, column=0, sticky="ew", pady=(0, 15))
         row_xml.columnconfigure(0, weight=1)
         
-        entry_xml = ctk.CTkEntry(row_xml, textvariable=self.xml_base_path, state="disabled", width=450)
+        entry_xml = ctk.CTkEntry(row_xml, textvariable=self.xml_base_path, width=450)
         entry_xml.grid(row=0, column=0, sticky="ew", padx=(0, 10))
         
         btn_xml = ctk.CTkButton(row_xml, text="Procurar...", width=100, command=self.buscar_pasta_xml)
@@ -72,7 +72,7 @@ class HebronApp(ctk.CTk):
         row_out.grid(row=5, column=0, sticky="ew", pady=(0, 15))
         row_out.columnconfigure(0, weight=1)
         
-        entry_out = ctk.CTkEntry(row_out, textvariable=self.output_path, state="disabled", width=450)
+        entry_out = ctk.CTkEntry(row_out, textvariable=self.output_path, width=450)
         entry_out.grid(row=0, column=0, sticky="ew", padx=(0, 10))
         
         btn_out = ctk.CTkButton(row_out, text="Procurar...", width=100, command=self.buscar_pasta_saida)
