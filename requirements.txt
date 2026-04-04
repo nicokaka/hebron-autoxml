@@ -3,6 +3,3 @@ cryptography>=41.0.0
 requests>=2.30.0
 openpyxl>=3.1.2
 customtkinter>=5.2.0
-
-# --- Dev / Build ---
-pyinstaller>=6.5.0

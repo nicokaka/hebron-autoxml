@@ -24,16 +24,16 @@ python main.py
 - Aponte a sua Pasta de Output
 - Pressione Processar. Ao final, a interface emitirá um resumo e um Relatório Formatado + ZIP para entrega limpa.
 
-## 2. Gerando o Primeiro Empacotamento / Build (.exe p/ Windows)
+## 2. Gerando o Empacotamento para Usuário Final (.exe)
 
-A arquitetura do MVP 1 foi preparada estritamente de maneira Modular. Para testar o primeiro build independente de instalador focado na estabilidade da compilação visual:
+O Build (modo `onedir`) converte todo este projeto cru em uma pasta nativa independente de instalação do Python.
+**IMPORTANTE:** O binário do Windows só pode ser emitido rolando essas instruções em um SO Windows!
 
-Gere um repositório isolado em Windows rodando o motor `PyInstaller`:
+1. Em sua máquina ou VM **Windows**, abra o Terminal/PowerShell na raiz do projeto.
+2. Certifique-se de que iniciou seu ambiente virtual (`venv\Scripts\activate`).
+3. Rode o novo script automatizado de empacotamento:
+   ```cmd
+   .\scripts\build_windows.bat
+   ```
 
-```powershell
-pyinstaller --name "HebronAutoXML" --onedir --windowed --noconfirm main.py
-```
-
-Isso instruirá a AST do PyInstaller a não encostar no lixo contido em pacotes obsoletos como `prova_tecnica/` ou `/tests/`. A raiz contida em `dist/HebronAutoXML/` poderá ser compactada inteiramente após gerada e transferida à Usuária-Alvo para rodar simplesmente clicando no `HebronAutoXML.exe`.
-
-*Status: Aprovado p/ Build. Faltam etapas de empacotamento MSI/InnoSetup estático.*
+**Onde o artefato cai?** O script vai instalar o `PyInstaller` (via `requirements-dev.txt`) e soltar sua pasta limpa em `dist/HebronAutoXML/`. Essa pasta inteira será o software. Quando as futuras definições de _Installer Wizard (InnoSetup)_ vierem, elas beberão dessa fonte.

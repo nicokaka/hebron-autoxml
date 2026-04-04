@@ -1,0 +1,4 @@
+# Dependências específicas para compilação Windows e ambiente de dev
+# Usado para gerar o bundle Final Onedir do HebronAutoXML
+
+pyinstaller>=6.5.0

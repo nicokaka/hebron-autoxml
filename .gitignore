@@ -21,3 +21,7 @@ build/
 .idea/
 .vscode/
 *.swp
+
+# Artifacts de Build do Hebron
+*.spec
+HebronAutoXML.spec
