@@ -17,7 +17,7 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt
 
 echo.
-echo [3/3] Iniciando o compialdor PyInstaller...
+echo [3/3] Iniciando o compilador PyInstaller...
 pyinstaller --name "HebronAutoXML" --onedir --windowed --noconfirm main.py --clean
 
 echo.

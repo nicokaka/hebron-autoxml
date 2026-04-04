@@ -112,6 +112,22 @@ class HebronApp(ctk.CTk):
         if not self.excel_path.get() or not self.xml_base_path.get() or not self.output_path.get():
             self.mostrar_erro_validacao("STATUS: Preencha todos os três diretórios antes de continuar.")
             return
+
+        if not os.path.isfile(self.excel_path.get()):
+            self.mostrar_erro_validacao("STATUS: A Planilha Excel informada não foi encontrada no disco.")
+            return
+
+        if not os.path.isdir(self.xml_base_path.get()):
+            self.mostrar_erro_validacao("STATUS: A Pasta Base de XMLs informada não existe.")
+            return
+
+        out_path = self.output_path.get()
+        if not os.path.exists(out_path):
+            try:
+                os.makedirs(out_path, exist_ok=True)
+            except Exception:
+                self.mostrar_erro_validacao("STATUS: Não foi possível acessar/criar a pasta de Saída.")
+                return
             
         self.bloquear_ui_processando()
         

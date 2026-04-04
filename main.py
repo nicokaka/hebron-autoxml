@@ -1,4 +1,3 @@
-import os
 from src.gui.app import HebronApp
 
 def main():

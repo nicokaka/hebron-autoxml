@@ -1,35 +1,25 @@
 import os
 import unittest
 
+from src.core.key_validator import classificar_chaves
+from src.core.deduplicador import remover_duplicadas
+
 def parse_e_deduplicar_chaves(filepath: str):
     """
-    Lê o arquivo de chaves (simulando a coluna B normalizada),
-    ignora linhas em branco, valida 44 dígitos, 
-    elimina duplicados utilizando dict keys (garantindo ordem e unicidade O(1)).
+    Lê o arquivo de chaves textuais da fixture pre-gerada,
+    integra a lógica do core para validação e remoção.
     Retorna a contagem exata (total_bruto, chaves_unicas_limpas, invalidas).
     """
     if not os.path.isfile(filepath):
         raise FileNotFoundError(f"Fixture não encontrada no disco: {filepath}")
         
     with open(filepath, 'r', encoding='utf-8') as iterador:
-        # Strip na quebra de linha ('\n')
         linhas = [str(linha.strip()) for linha in iterador if linha.strip()]
         
-    chaves_validas = []
-    chaves_invalidas = []
+    validas, invalidas = classificar_chaves(linhas)
+    unicas, duplicadas = remover_duplicadas(validas)
     
-    # Validação Semântica Basica (Evita lixo textual se o Excel for lido errado)
-    for chave in linhas:
-        if len(chave) == 44 and chave.isdigit():
-            chaves_validas.append(chave)
-        else:
-            chaves_invalidas.append(chave)
-            
-    # Usando o padrão Python >= 3.7 dict.fromkeys preserva a ordem que é extraída da Coluna B
-    # Extinguindo as cópias repetidas instantaneamente (Hashtable O(1)).
-    chaves_unicas = list(dict.fromkeys(chaves_validas))
-    
-    return len(linhas), chaves_unicas, chaves_invalidas
+    return len(linhas), unicas, invalidas
 
 class TestDeduplicacaoProcessamentoBatch(unittest.TestCase):
     def setUp(self):

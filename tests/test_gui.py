@@ -55,7 +55,14 @@ class TestHebronAppGUI(unittest.TestCase):
         self.app.btn_processar.configure.assert_not_called()
 
     @patch('src.gui.app.threading.Thread')
-    def test_bloqueio_interface_durante_processamento(self, mock_thread):
+    @patch('src.gui.app.os.path.isfile')
+    @patch('src.gui.app.os.path.isdir')
+    @patch('src.gui.app.os.path.exists')
+    def test_bloqueio_interface_durante_processamento(self, mock_exists, mock_isdir, mock_isfile, mock_thread):
+        mock_isfile.return_value = True
+        mock_isdir.return_value = True
+        mock_exists.return_value = True
+        
         self.app.excel_path.get.return_value = "C:/excel.xlsx"
         self.app.xml_base_path.get.return_value = "C:/xml_in"
         self.app.output_path.get.return_value = "C:/out"
