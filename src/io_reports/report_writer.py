@@ -1,23 +1,21 @@
 import openpyxl
 
-def gerar_relatorio_excel(caminho_saida: str, records: list[dict]):
-    """
-    Constrói a planilha limpa contendo o log do faturamento.
-    records: list de dicionários com as chaves:
-        - 'chave'
-        - 'status'
-        - 'observacao'
-        - 'arquivo_xml'
-    """
+def gerar_relatorio_excel(caminho_saida: str, registros: list[dict]):
+    """Gera relatório .xlsx formatado a partir dos registros de processamento."""
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Relatório Integração Offline"
+    ws.title = "Relatório Integração"
     
-    # Cabeçalho
     cabecalhos = ["CHAVE_NF_CT", "STATUS", "OBSERVAÇÃO", "CAMINHO_DO_ARQUIVO"]
     ws.append(cabecalhos)
     
-    for r in records:
+    # Formatação básica de colunas
+    ws.column_dimensions['A'].width = 50
+    ws.column_dimensions['B'].width = 25
+    ws.column_dimensions['C'].width = 50
+    ws.column_dimensions['D'].width = 60
+    
+    for r in registros:
         ws.append([
             r.get('chave', ''),
             r.get('status', 'DESCONHECIDO'),
