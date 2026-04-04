@@ -31,9 +31,12 @@ def testar_conexao_sefaz(cert_path: str, key_path: str) -> bool:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Etapa 0.1: Teste A1 PFX e conectividade SEFAZ")
     parser.add_argument("--pfx", required=True, help="Caminho relativo ou absoluto para o arquivo .pfx")
-    parser.add_argument("--senha", required=True, help="Senha do arquivo .pfx")
+    parser.add_argument("--senha", required=False, help="Senha do arquivo .pfx (se omitida, pedirá de forma oculta)")
     
     args = parser.parse_args()
+    
+    import getpass
+    senha_cert = args.senha or getpass.getpass("Digite a senha do certificado PFX: ")
     
     validado = []
     falhou = []
@@ -46,7 +49,7 @@ def main() -> None:
     validado.append("Arquivo PFX encontrado no disco.")
     
     try:
-        priv_key, cert, _ = helpers.carregar_pfx(args.pfx, args.senha)
+        priv_key, cert, _ = helpers.carregar_pfx(args.pfx, senha_cert)
         validado.append("Senha correta. Chaves desencapsuladas temporalmente na memória (Decodificação PKCS#12).")
     except ValueError:
         falhou.append("Senha incorreta ou pacote PFX mal formatado (ValueError - Mac Verify).")

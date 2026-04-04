@@ -60,11 +60,14 @@ def consultar_sefaz_cte_chave(cert_path: str, key_path: str, uf_autor: str, cnpj
 def main():
     parser = argparse.ArgumentParser(description="Etapa 0.3: Consulta Pura de CT-e (via Chave em Distribuicao)")
     parser.add_argument("--pfx", required=True, help="Caminho para o arquivo .pfx")
-    parser.add_argument("--senha", required=True, help="Senha")
+    parser.add_argument("--senha", required=False, help="Senha (se omitida, pedirá de forma interativa)")
     parser.add_argument("--chave-cte", required=True, help="Chave CT-e exata de 44 dígitos apenas números")
     parser.add_argument("--ambiente", default="producao", choices=["homologacao", "producao"], help="Use producao para testar chaves CTe reais.")
     parser.add_argument("--salvar-exemplo-dir", default=None, help="Pasta para salvar extração do XML")
     args = parser.parse_args()
+    
+    import getpass
+    senha_cert = args.senha or getpass.getpass("Digite a senha do certificado PFX: ")
     
     validado = []
     falhou = []
@@ -80,7 +83,7 @@ def main():
         sys.exit(1)
 
     try:
-        priv_key, cert, _ = helpers.carregar_pfx(args.pfx, args.senha)
+        priv_key, cert, _ = helpers.carregar_pfx(args.pfx, senha_cert)
     except Exception:
         falhou.append("Erro de Decodificação PKCS#12.")
         helpers.print_relatorio("ERRO DE CERTIFICADO", validado, falhou, "A Senha incorreta ou formato corrompido paralisa o app.")

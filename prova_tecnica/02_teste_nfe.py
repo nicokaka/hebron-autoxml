@@ -74,16 +74,24 @@ def tentar_obter_chave_xml(xml_conteudo: str) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Etapa 0.2: Consulta de Distribuição Pura NF-e e Schemas")
     parser.add_argument("--pfx", required=True, help="Caminho relativo/absoluto PFX")
-    parser.add_argument("--senha", required=True, help="Senha")
-    parser.add_argument("--uf-autor", required=True, help="Código IBGE UF Solicitante (Ex: 35)")
+    parser.add_argument("--senha", required=False, help="Senha (se omitida, será solicitada interativamente)")
+    parser.add_argument("--uf-autor", required=True, help="Código IBGE numérico com 2 dígitos exatos (Ex: 35) - Não use siglas (SP)")
     parser.add_argument("--ambiente", default="producao", choices=["homologacao", "producao"], help="Use producao para ter volume de notas real de terceiros.")
     parser.add_argument("--cnpj-base", required=True, help="CNPJ puro (Exato 14 dígitos numéricos)")
     parser.add_argument("--salvar-exemplo-dir", default=None, help="Pasta para depósito de XML full extraído puramente.")
     args = parser.parse_args()
     
+    import getpass
+    senha_cert = args.senha or getpass.getpass("Digite a senha do certificado PFX: ")
+    
     validado = []
     falhou = []
     
+    if len(args.uf_autor) != 2 or not args.uf_autor.isdigit():
+        falhou.append(f"O parâmetro uf-autor provido ({args.uf_autor}) é inválido.")
+        helpers.print_relatorio("FALHA DE PARÂMETRO", validado, falhou, "O WebService não aceita a sigla (ex: SP). Use o código numérico IBGE (ex: 35).")
+        sys.exit(1)
+        
     if len(args.cnpj_base) != 14 or not args.cnpj_base.isdigit():
         falhou.append(f"CNPJ inserido inválido: '{args.cnpj_base}'.")
         helpers.print_relatorio("FALHA DE PARÂMETRO", validado, falhou, "O CNPJ na distribuição precisa ter exatamente 14 numerais limpos/sem máscaras.")
@@ -95,7 +103,7 @@ def main():
         sys.exit(1)
 
     try:
-        priv_key, cert, _ = helpers.carregar_pfx(args.pfx, args.senha)
+        priv_key, cert, _ = helpers.carregar_pfx(args.pfx, senha_cert)
     except Exception:
         falhou.append("Rejeição da Sefaz Criptográfica (Senha/Corrupção no arquivo base).")
         helpers.print_relatorio("FALHA DE COMPACTAÇÃO CERTIFICADO", validado, falhou, "O pfx encontra-se atipicamente barrado ao OpenSSL nativo Python.")
