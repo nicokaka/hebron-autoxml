@@ -1,5 +1,4 @@
 import shutil
-import os
 
 def gerar_zip_arquivos(pasta_origem: str, caminho_zip_saida: str):
     """

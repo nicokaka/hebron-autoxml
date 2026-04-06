@@ -59,7 +59,7 @@ def iniciar_extracao_hibrida(caminho_excel: str, pasta_base_xmls: str, pasta_out
         })
         
     for chave in chaves_invalidas:
-         registros_relatorio.append({
+        registros_relatorio.append({
             'chave': chave,
             'status': 'invalida',
             'observacao': 'Formato incorreto (esperado 44 dígitos).',

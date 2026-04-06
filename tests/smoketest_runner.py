@@ -2,12 +2,12 @@ import os
 import shutil
 import time
 import sys
+import tempfile
 from unittest.mock import MagicMock
 import openpyxl
 
 # --- Setup Fake Ambiente (Massa) ---
-SMOKE_DIR = "/home/nicolas/.gemini/antigravity/scratch/smoke_test"
-os.makedirs(SMOKE_DIR, exist_ok=True)
+SMOKE_DIR = tempfile.mkdtemp(prefix="hebron_smoke_")
 
 excel_path = os.path.join(SMOKE_DIR, "contabilidade_extrato.xlsx")
 xml_dir = os.path.join(SMOKE_DIR, "fake_sefaz")

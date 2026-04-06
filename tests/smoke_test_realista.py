@@ -2,12 +2,12 @@ import os
 import shutil
 import time
 import sys
+import tempfile
 from unittest.mock import MagicMock
 import openpyxl
 
 # --- Setup Fake Ambiente (Massa) ---
-SMOKE_DIR = "/home/nicolas/.gemini/antigravity/scratch/smoke_test_realista"
-os.makedirs(SMOKE_DIR, exist_ok=True)
+SMOKE_DIR = tempfile.mkdtemp(prefix="hebron_smoke_realista_")
 
 excel_path = os.path.join(SMOKE_DIR, "lote_contabil.xlsx")
 xml_dir = os.path.join(SMOKE_DIR, "xmls_sefaz")
@@ -120,6 +120,6 @@ print("[OK] Toda a cadeia lógica de UI exibiu Feedback Realista perfeitamente c
 
 try:
     shutil.rmtree(SMOKE_DIR)
-except:
+except OSError:
     pass
 print("\n🔥 [Veredito Final] SMOKE TEST ESTÚPIDO DE REALISTA PASSED! PODE INICIAR O BUNDLE! 🔥")

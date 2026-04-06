@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hebron-autoxml"
 version = "0.1.0"
-description = "Automação de processamento de XMLs (Proof of Concept)"
+description = "Processador offline de XMLs contábeis (NF-e/CT-e) - MVP 1"
 requires-python = ">=3.11"
 authors = [
     { name = "Developer" }
