@@ -38,9 +38,9 @@ jobs:
           pyinstaller --name "HebronAutoXML" --onedir --windowed --noconfirm --icon="scripts/icon.ico" main.py --clean
 
       - name: Compilar Instalador (Inno Setup)
-        uses: actions-hub/inno-setup@v1
+        uses: minyus/iscc-action@v1
         with:
-          path: scripts/hebron_installer.iss
+          iss-path: scripts/hebron_installer.iss
 
       - name: Criar Release e Upload Instalador
         uses: softprops/action-gh-release@v2
