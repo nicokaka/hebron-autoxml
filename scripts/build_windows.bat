@@ -18,7 +18,7 @@ pip install -r requirements-dev.txt
 
 echo.
 echo [3/3] Iniciando o compilador PyInstaller...
-pyinstaller --name "HebronAutoXML" --onedir --windowed --noconfirm main.py --clean
+pyinstaller --name "HebronAutoXML" --onedir --windowed --noconfirm --icon="scripts\icon.ico" main.py --clean
 
 echo.
 echo ========================================================

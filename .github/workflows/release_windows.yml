@@ -1,0 +1,54 @@
+name: Build and Release Windows
+
+on:
+  push:
+    tags:
+      - 'v*'  # Dispara automaticamente quando você publicar uma tag, ex: git push origin v1.0.0
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Código
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar Dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Executar Testes de Regressão
+        run: |
+          python -m unittest discover -s tests -v
+
+      - name: Build com PyInstaller (OneDir)
+        run: |
+          # Compila o app apontando para a pasta scripts/icon.ico para uso no Windows
+          pyinstaller --name "HebronAutoXML" --onedir --windowed --noconfirm --icon="scripts/icon.ico" main.py --clean
+
+      - name: Compilar Instalador (Inno Setup)
+        uses: actions-hub/inno-setup@v1
+        with:
+          path: scripts/hebron_installer.iss
+
+      - name: Criar Release e Upload Instalador
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Output/HebronSetup.exe
+          name: HebronAutoXML ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

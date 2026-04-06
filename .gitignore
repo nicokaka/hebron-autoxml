@@ -24,3 +24,4 @@ build/
 
 # Artifacts de Build do Hebron
 *.spec
+Output/
