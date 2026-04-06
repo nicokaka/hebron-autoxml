@@ -12,7 +12,7 @@ from src.io_reports.zipper import gerar_zip_arquivos
 def iniciar_extracao_hibrida(caminho_excel: str, pasta_base_xmls: str, pasta_output_raiz: str) -> dict:
     """Orquestra o fluxo offline de validação e cruzamento de XMLs."""
     
-    time_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    time_str = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     pasta_sucesso = os.path.join(pasta_output_raiz, f"Processados_{time_str}")
     sub_pasta_xml = os.path.join(pasta_sucesso, "xmls")
     

@@ -94,7 +94,7 @@ class HebronApp(ctk.CTk):
         # Oculto até que haja sucesso. Será renderizado no pack pós sucesso
         
     def buscar_excel(self):
-        pth = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx")])
+        pth = filedialog.askopenfilename(filetypes=[("Planilhas Excel", "*.xlsx"), ("Todos os Arquivos", "*.*")])
         if pth:
             self.excel_path.set(pth)
             
