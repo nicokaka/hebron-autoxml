@@ -186,7 +186,7 @@ class HebronApp(ctk.CTk):
             import subprocess
             import sys
             
-            # Cross-OS open command nativo nativo puro fallback
+            # Cross-OS open command nativo puro
             if sys.platform == "win32":
                 os.startfile(self.ultima_pasta_gerada)
             elif sys.platform == "darwin":
