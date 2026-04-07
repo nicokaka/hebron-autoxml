@@ -45,9 +45,7 @@ class HebronApp(ctk.CTk):
         self.on_senha = tk.StringVar()
         self.on_out_path = tk.StringVar()
         
-        self.off_excel_path = tk.StringVar()
         self.off_xml_base = tk.StringVar()
-        self.off_out_path = tk.StringVar()
 
         self._build_ui()
         self._sincronizar_campos_modo(self.modo_ativo.get())
@@ -107,7 +105,7 @@ class HebronApp(ctk.CTk):
         self.row_senha = ctk.CTkFrame(self.frm_card, fg_color=THEME["bg_card"])
         self.row_senha.pack(fill="x", padx=20, pady=10)
         
-        ctk.CTkLabel(self.row_senha, text="🔑 Senha", width=180, anchor="w", font=ctk.CTkFont(weight="bold")).pack(side="left")
+        ctk.CTkLabel(self.row_senha, text="🔑 Senha", width=180, anchor="w", font=ctk.CTkFont(weight="bold"), text_color=THEME["text_primary"]).pack(side="left")
         ctk.CTkEntry(self.row_senha, textvariable=self.on_senha, show="•", fg_color=THEME["bg_input"], border_width=1, width=150).pack(side="left", padx=(0, 10))
         
         self.row_out = self._criar_input_row("📦 Pasta de Saída", self.on_out_path, self._cmd_buscar_out)
@@ -187,14 +185,15 @@ class HebronApp(ctk.CTk):
         if modo == "Download SEFAZ":
             self.row_senha.pack(fill="x", padx=20, pady=10, before=self.row_out)
             self.row_pfx.pack(fill="x", padx=20, pady=10, before=self.row_senha)
+            self.btn_processar.configure(text="INICIAR DOWNLOAD")
         else:
             self.row_xml.pack(fill="x", padx=20, pady=10, before=self.row_out)
+            self.btn_processar.configure(text="INICIAR BUSCA LOCAL")
 
     def _cmd_buscar_excel(self):
         p = filedialog.askopenfilename(filetypes=[("Planilhas", "*.xlsx")])
         if p:
             self.on_excel_path.set(p)
-            self.off_excel_path.set(p)
             
     def _cmd_buscar_pfx(self):
         p = filedialog.askopenfilename(filetypes=[("Certificado", "*.pfx"), ("Todos", "*.*")])
@@ -208,7 +207,6 @@ class HebronApp(ctk.CTk):
         p = filedialog.askdirectory()
         if p:
             self.on_out_path.set(p)
-            self.off_out_path.set(p)
 
     def _log(self, message):
         timestamp = os.environ.get("MOCK_TIMESTAMP", datetime.now().strftime("%H:%M:%S"))
@@ -277,9 +275,9 @@ class HebronApp(ctk.CTk):
         t.start()
 
     def _disparar_offline(self):
-        ex = self.off_excel_path.get()
+        ex = self.on_excel_path.get()
         base = self.off_xml_base.get()
-        out = self.off_out_path.get()
+        out = self.on_out_path.get()
         
         if not all([ex, base, out]):
             self._log("[ERRO] Preencha: Excel, Pasta Secundária e Pasta de Saída.")

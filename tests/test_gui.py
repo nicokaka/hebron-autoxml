@@ -30,9 +30,9 @@ class TestHebronAppGUI(unittest.TestCase):
         self.app.after = lambda delay, callback, *args: callback(*args)
         
         # Mocks para variáveis base 
-        self.app.off_excel_path = MagicMock()
+        self.app.on_excel_path = MagicMock()
         self.app.off_xml_base = MagicMock()
-        self.app.off_out_path = MagicMock()
+        self.app.on_out_path = MagicMock()
         self.app.modo_ativo = MagicMock()
         
         # Mocks dos componentes UI novos
@@ -51,9 +51,9 @@ class TestHebronAppGUI(unittest.TestCase):
     def test_validacao_campos_obrigatorios_offline(self):
         self.app.modo_ativo.get.return_value = "Busca Local"
         
-        self.app.off_excel_path.get.return_value = ""
+        self.app.on_excel_path.get.return_value = ""
         self.app.off_xml_base.get.return_value = "C:/fake"
-        self.app.off_out_path.get.return_value = "C:/fakeout"
+        self.app.on_out_path.get.return_value = "C:/fakeout"
         
         self.app.iniciar_roteamento()
         
@@ -68,9 +68,9 @@ class TestHebronAppGUI(unittest.TestCase):
     @patch('src.gui.app.threading.Thread')
     def test_bloqueio_interface_durante_processamento(self, mock_thread):
         self.app.modo_ativo.get.return_value = "Busca Local"
-        self.app.off_excel_path.get.return_value = "C:/excel.xlsx"
+        self.app.on_excel_path.get.return_value = "C:/excel.xlsx"
         self.app.off_xml_base.get.return_value = "C:/xml_in"
-        self.app.off_out_path.get.return_value = "C:/out"
+        self.app.on_out_path.get.return_value = "C:/out"
         
         self.app.iniciar_roteamento()
         

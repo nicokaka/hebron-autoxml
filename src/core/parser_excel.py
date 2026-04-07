@@ -9,6 +9,10 @@ def ler_coluna_b(caminho_arquivo: str) -> list[str]:
     try:
         planilha = wb.active
         
+        if planilha is None:
+            wb.close()
+            raise ValueError("A planilha Excel não possui uma aba ativa.")
+            
         chaves = []
         
         for row in planilha.iter_rows(min_row=2, min_col=2, max_col=2, values_only=True):
