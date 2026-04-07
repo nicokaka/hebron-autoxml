@@ -80,11 +80,8 @@ def iniciar_download_sefaz(
                 max_nsu = "1"
                 tentativas = 0
                 
-                while int(ult_nsu) < int(max_nsu) and tentativas < 40 and chaves_nfe_pendentes:
-                    on_progresso(f"🔍 [DEBUG] Payload de Requisição distNSU enviado: UF={uf_autor_nsu}, CNPJ={cnpj_base}, ultNSU={ult_nsu}, Ambiente={ambiente}")
+                while int(ult_nsu) < int(max_nsu) and tentativas < 500 and chaves_nfe_pendentes:
                     resp_nsu = baixar_lote_nsu(cert_path, key_path, uf_autor_nsu, cnpj_base, ult_nsu, ambiente)
-                    
-                    on_progresso(f"🔍 [DEBUG] Resposta SEFAZ Recebida: status='{resp_nsu.get('status')}', cStat='{resp_nsu.get('cStat', '?')}', msg='{resp_nsu.get('mensagem', '?')}', total docs={len(resp_nsu.get('docs', []))}")
                     
                     if resp_nsu.get('status') in ('vazio', 'rejeitado_656', 'erro_rede', 'erro_soap'):
                         motivo = resp_nsu.get('mensagem', 'Nenhum documento retornado na malha')
@@ -96,9 +93,11 @@ def iniciar_download_sefaz(
                     ult_nsu = resp_nsu.get('ultNSU', ult_nsu)
                     max_nsu = resp_nsu.get('maxNSU', max_nsu)
                     
+                    encontradas_neste_lote = 0
+                    nfes_no_lote = 0
                     for doc in resp_nsu.get('docs', []):
-                        on_progresso(f"🔍 [DEBUG] Processando doc NSU={doc.get('NSU', '?')} -> schema={doc.get('schema', '?')}")
                         if 'procNFe' in doc.get('schema', ''):
+                            nfes_no_lote += 1
                             try:
                                 xml_str = descompactar_base64_zip(doc['content_b64'])
                                 chave_extraida = obter_chave_interna(xml_str)
@@ -110,12 +109,15 @@ def iniciar_download_sefaz(
                                     registros_relatorio.append({'chave': chave_extraida, 'status': 'baixada_ok', 'observacao': 'Sucesso via Lote (distNSU).', 'arquivo_xml': os.path.basename(caminho_xml)})
                                     baixadas_com_sucesso += 1
                                     chaves_nfe_pendentes.remove(chave_extraida)
+                                    encontradas_neste_lote += 1
                             except Exception:
                                 pass
-                                
-                    on_progresso(f"[Fase 1] Lendo doc {ult_nsu} de {max_nsu} (Restam {len(chaves_nfe_pendentes)} não encontradas no lote)")
+                    
+                    pct = int((int(ult_nsu) / max(int(max_nsu), 1)) * 100)
+                    msg_encontradas = f" ✅ +{encontradas_neste_lote} encontradas!" if encontradas_neste_lote else ""
+                    on_progresso(f"[Fase 1] NSU {ult_nsu}/{max_nsu} ({pct}%) | {nfes_no_lote} NFes no lote | Pendentes: {len(chaves_nfe_pendentes)}{msg_encontradas}")
                     tentativas += 1
-                    time.sleep(2.0)
+                    time.sleep(0.5)
                     
             # --- FASE 2: LOOP INDIVIDUAL (NFe consChNFe Fallback) ---
             # Aqui entra a trava contra cStat 656: Sleep longo para não furar 20/hora.
