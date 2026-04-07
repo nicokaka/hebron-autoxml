@@ -180,13 +180,14 @@ class HebronApp(ctk.CTk):
 
     # --- LÓGICA DE UI E CALLBACKS ---
     def _sincronizar_campos_modo(self, modo):
+        self.row_pfx.pack_forget()
+        self.row_senha.pack_forget()
+        self.row_xml.pack_forget()
+
         if modo == "Download SEFAZ":
-            self.row_xml.pack_forget()
-            self.row_pfx.pack(fill="x", padx=20, pady=10, before=self.row_senha)
             self.row_senha.pack(fill="x", padx=20, pady=10, before=self.row_out)
+            self.row_pfx.pack(fill="x", padx=20, pady=10, before=self.row_senha)
         else:
-            self.row_pfx.pack_forget()
-            self.row_senha.pack_forget()
             self.row_xml.pack(fill="x", padx=20, pady=10, before=self.row_out)
 
     def _cmd_buscar_excel(self):
