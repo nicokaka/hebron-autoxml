@@ -7,6 +7,7 @@ import customtkinter as ctk
 
 from src.core.offline_job import iniciar_extracao_hibrida
 from src.core.online_job import iniciar_download_sefaz
+from src.__version__ import __version__
 
 THEME = {
     "bg_primary":     "#0d1117",
@@ -27,7 +28,7 @@ class HebronApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("HebronAutoXML - Processador Contábil v2.0")
+        self.title(f"HebronAutoXML - Processador Contábil v{__version__}")
         self.geometry("850x720")
         self.resizable(False, False)
         
@@ -56,6 +57,14 @@ class HebronApp(ctk.CTk):
         self._build_zona_form()
         self._build_zona_progress()
         self._build_zona_action()
+        
+        # Rodapé de Versão
+        ctk.CTkLabel(
+            self.frm_card,
+            text=f"v{__version__} • Hebron Contabilidade",
+            font=ctk.CTkFont(size=11),
+            text_color=THEME["text_secondary"]
+        ).pack(side="bottom", pady=(0, 8))
         
     def _build_zona_header(self):
         f = ctk.CTkFrame(self, fg_color=THEME["bg_primary"])
