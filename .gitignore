@@ -22,6 +22,7 @@ build/
 .vscode/
 *.swp
 
-# Artifacts de Build do Hebron
-*.spec
+# Artifacts de Build do Hebron (gerados, não versionar)
 Output/
+build/
+dist/

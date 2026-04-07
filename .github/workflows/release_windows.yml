@@ -3,7 +3,7 @@ name: Build and Release Windows
 on:
   push:
     tags:
-      - 'v*'  # Dispara automaticamente quando você publicar uma tag, ex: git push origin v1.0.0
+      - 'v*'  # Dispara automaticamente quando você publicar uma tag, ex: git push origin v2.0.0
 
 jobs:
   build:
@@ -19,7 +19,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
 
       - name: Instalar Dependências
@@ -29,24 +29,45 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Executar Testes de Regressão
+        env:
+          PYTHONPATH: .
         run: |
           python -m unittest discover -s tests -v
 
-      - name: Build com PyInstaller (OneDir)
+      - name: Build com PyInstaller (OneDir via spec)
         run: |
-          # Compila o app apontando para a pasta scripts/icon.ico para uso no Windows
-          pyinstaller --name "HebronAutoXML" --onedir --windowed --noconfirm --icon="scripts/icon.ico" main.py --clean
+          pyinstaller --noconfirm HebronAutoXML.spec
+
+      - name: Instalar Inno Setup 6
+        run: |
+          choco install innosetup --yes --no-progress
+        shell: powershell
 
       - name: Compilar Instalador (Inno Setup)
         run: |
+          New-Item -ItemType Directory -Path "Output" -Force | Out-Null
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" scripts\hebron_installer.iss
+        shell: powershell
 
       - name: Criar Release e Upload Instalador
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            Output/HebronSetup.exe
+            Output/HebronAutoXML_v2.0_Setup.exe
           name: HebronAutoXML ${{ github.ref_name }}
+          body: |
+            ## HebronAutoXML ${{ github.ref_name }}
+
+            Processador automático de XMLs fiscais brasileiros (NF-e / CT-e).
+
+            ### Como instalar
+            1. Baixe o `HebronAutoXML_v2.0_Setup.exe` abaixo
+            2. Execute o instalador (não precisa de permissão de administrador)
+            3. Clique em avançar e pronto — aparece no Menu Iniciar e no Desktop se quiser
+
+            ### Requisitos
+            - Windows 10 ou superior (64-bit)
+            - Certificado digital A1 (`.pfx`) para o modo Download SEFAZ
           draft: false
           prerelease: false
         env:
