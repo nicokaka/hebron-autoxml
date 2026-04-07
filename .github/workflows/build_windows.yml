@@ -12,9 +12,6 @@ on:
   # Permite que você clique num botão no GitHub para gerar quando quiser:
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   build_windows:
     runs-on: windows-latest
