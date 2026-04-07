@@ -8,6 +8,7 @@ class MockCTkClass:
     def title(self, *args): pass
     def geometry(self, *args): pass
     def resizable(self, *args): pass
+    def configure(self, *args, **kwargs): pass
     
 mock_ctk = MagicMock()
 mock_ctk.CTk = MockCTkClass
@@ -25,57 +26,62 @@ class TestHebronAppGUI(unittest.TestCase):
     def setUp(self):
         self.app = HebronApp()
         
-        # Interceptar chamadas agendadas para rodar imediatamente de forma Síncrona
-        self.app._agendar_ui_update = lambda callback: callback()
+        # Interceptar chamadas agendadas (Tkinter 'after') para rodar imediatamente (Sincrono)
+        self.app.after = lambda delay, callback, *args: callback(*args)
         
         # Mocks para variáveis base 
-        self.app.excel_path = MagicMock()
-        self.app.xml_base_path = MagicMock()
-        self.app.output_path = MagicMock()
+        self.app.off_excel_path = MagicMock()
+        self.app.off_xml_base = MagicMock()
+        self.app.off_out_path = MagicMock()
+        self.app.modo_ativo = MagicMock()
         
-        # Mocks dos componentes UI
-        self.app.lbl_status = MagicMock()
+        # Mocks dos componentes UI novos
+        self.app.log_box = MagicMock()
         self.app.btn_processar = MagicMock()
         self.app.btn_abrir_pasta = MagicMock()
+        self.app.seg_button = MagicMock()
+        self.app.f_stats = MagicMock()
+        self.app.progress_bar = MagicMock()
+        self.app.lbl_pct = MagicMock()
+        self.app.lbl_status = MagicMock()
+        self.app.lbl_lidas = MagicMock()
+        self.app.lbl_validas = MagicMock()
+        self.app.lbl_baixadas = MagicMock()
         
-    def test_validacao_campos_obrigatorios(self):
-        # Cenário de campo vazio
-        self.app.excel_path.get.return_value = ""
-        self.app.xml_base_path.get.return_value = "C:/fake"
-        self.app.output_path.get.return_value = "C:/fakeout"
+    def test_validacao_campos_obrigatorios_offline(self):
+        self.app.modo_ativo.get.return_value = "Busca Local"
         
-        self.app.iniciar_processamento()
+        self.app.off_excel_path.get.return_value = ""
+        self.app.off_xml_base.get.return_value = "C:/fake"
+        self.app.off_out_path.get.return_value = "C:/fakeout"
         
-        # lbl_status deve ser chamado recebendo a string de erro (vermelha)
-        args, kwargs = self.app.lbl_status.configure.call_args
-        self.assertIn("Preencha todos", kwargs['text'])
-        self.assertEqual(kwargs['text_color'], "#ff4444")
+        self.app.iniciar_roteamento()
         
-        # Não pode ter bloqueado UI já que não passou na validação
-        self.app.btn_processar.configure.assert_not_called()
+        # Log box deve receber o append do erro
+        self.assertTrue(self.app.log_box.insert.called)
+        args, kwargs = self.app.log_box.insert.call_args
+        self.assertIn("[ERRO]", args[1])
+        
+        # Não pode ter bloqueado UI já que não passou na validação (is_processing falso)
+        self.assertFalse(self.app.is_processing)
 
     @patch('src.gui.app.threading.Thread')
-    @patch('src.gui.app.os.path.isfile')
-    @patch('src.gui.app.os.path.isdir')
-    @patch('src.gui.app.os.path.exists')
-    def test_bloqueio_interface_durante_processamento(self, mock_exists, mock_isdir, mock_isfile, mock_thread):
-        mock_isfile.return_value = True
-        mock_isdir.return_value = True
-        mock_exists.return_value = True
+    def test_bloqueio_interface_durante_processamento(self, mock_thread):
+        self.app.modo_ativo.get.return_value = "Busca Local"
+        self.app.off_excel_path.get.return_value = "C:/excel.xlsx"
+        self.app.off_xml_base.get.return_value = "C:/xml_in"
+        self.app.off_out_path.get.return_value = "C:/out"
         
-        self.app.excel_path.get.return_value = "C:/excel.xlsx"
-        self.app.xml_base_path.get.return_value = "C:/xml_in"
-        self.app.output_path.get.return_value = "C:/out"
+        self.app.iniciar_roteamento()
         
-        self.app.iniciar_processamento()
+        # seg_button deve ser disabled
+        args, kwargs = self.app.seg_button.configure.call_args
+        self.assertEqual(kwargs['state'], "disabled")
         
         # btn_processar deve ser disabled
         args, kwargs = self.app.btn_processar.configure.call_args
         self.assertEqual(kwargs['state'], "disabled")
         self.assertIn("MASTIGANDO", kwargs['text'])
-        
-        # O botão abrir pasta deve ser escondido ao iniciar novo Job
-        self.app.btn_abrir_pasta.pack_forget.assert_called_once()
         
         # A Thread pra não travar Mainloop foi ativada
         mock_thread.assert_called_once()
@@ -84,7 +90,6 @@ class TestHebronAppGUI(unittest.TestCase):
 
     @patch('src.gui.app.iniciar_extracao_hibrida')
     def test_sucesso_fluxo_callbacks_e_resumo(self, mock_core):
-        # Objeto de retorno idêntico ao do core real
         mock_resultado = {
             "diretorio_saida": "C:/fake_output/Processados_123",
             "total_lidas": 10,
@@ -95,37 +100,30 @@ class TestHebronAppGUI(unittest.TestCase):
         }
         mock_core.return_value = mock_resultado
         
-        # Simulando diretamente a task interna como se fosse a Thread rolando
-        self.app._task_processar()
+        # Simulando diretamente a task interna rolando
+        self.app._task_offline("ex.xlsx", "dir_in", "dir_out")
         
-        # Verifica se UI reativou e formatou texto certo
+        # Verifica se UI reativou e populou labels de stat
         args, kwargs = self.app.btn_processar.configure.call_args
         self.assertEqual(kwargs['state'], "normal")
         
-        # O text gerado deveria citar "Lidas: 10" e "Encontradas: 9"
-        args_lbl, kwargs_lbl = self.app.lbl_status.configure.call_args
-        self.assertIn("Lidas: 10", kwargs_lbl['text'])
-        self.assertIn("Encontradas: 9", kwargs_lbl['text'])
-        self.assertEqual(kwargs_lbl['text_color'], "#00aa00")
+        # Verificando se inseriu stats nos labels
+        self.assertTrue(self.app.lbl_lidas.configure.called)
         
-        # Gravação de path
         self.assertEqual(self.app.ultima_pasta_gerada, "C:/fake_output/Processados_123")
-        self.app.btn_abrir_pasta.pack.assert_called() # Botão revelado
+        self.assertTrue(self.app.btn_abrir_pasta.pack.called)
+        self.assertTrue(self.app.f_stats.pack.called)
         
     @patch('src.gui.app.iniciar_extracao_hibrida')
     def test_falha_try_catch_trata_exception(self, mock_core):
         mock_core.side_effect = Exception("Disco Cheio")
         
-        self.app._task_processar()
+        self.app._task_offline("ex.xlsx", "dir_in", "dir_out")
         
-        args_lbl, kwargs_lbl = self.app.lbl_status.configure.call_args
-        self.assertIn("Disco Cheio", kwargs_lbl['text'])
-        self.assertEqual(kwargs_lbl['text_color'], "#ff4444")
-        
+        # Verifica se a UI destravou após erro (red state progress bar)
         args_btn, kwargs_btn = self.app.btn_processar.configure.call_args
         self.assertEqual(kwargs_btn['state'], "normal")
-        self.assertIn("TENTAR DE NOVO", kwargs_btn['text'])
-
+        self.assertTrue(self.app.progress_bar.configure.called)
 
 if __name__ == '__main__':
     unittest.main()

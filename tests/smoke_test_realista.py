@@ -61,6 +61,8 @@ class MockCTkClass:
     def title(self, *args): pass
     def geometry(self, *args): pass
     def resizable(self, *args): pass
+    def configure(self, *args, **kwargs): pass
+    def after(self, ms, callback, *args): callback(*args)
 mock_ctk = MagicMock()
 mock_ctk.CTk = MockCTkClass
 mock_tk = MagicMock()
@@ -74,17 +76,24 @@ from src.gui.app import HebronApp
 print("[SMOKE REALISTA] Iniciando App...")
 app = HebronApp()
 app._agendar_ui_update = lambda callback: callback()
-app.excel_path = MagicMock(); app.excel_path.get.return_value = excel_path
-app.xml_base_path = MagicMock(); app.xml_base_path.get.return_value = xml_dir
-app.output_path = MagicMock(); app.output_path.get.return_value = out_dir
+app.off_excel_path = MagicMock(); app.off_excel_path.get.return_value = excel_path
+app.off_xml_base = MagicMock(); app.off_xml_base.get.return_value = xml_dir
+app.off_out_path = MagicMock(); app.off_out_path.get.return_value = out_dir
+app.modo_ativo = MagicMock(); app.modo_ativo.get.return_value = "Busca Local"
 
 app.lbl_status = MagicMock()
+app.lbl_lidas = MagicMock()
+app.lbl_validas = MagicMock()
+app.lbl_baixadas = MagicMock()
+app.progress_bar = MagicMock()
+app.seg_button = MagicMock()
+app.f_stats = MagicMock()
 app.btn_processar = MagicMock()
 app.btn_abrir_pasta = MagicMock()
 
 # --- 4. EXECUTANDO FLUXO DA GUI ---
 print("[SMOKE REALISTA] Disparando Processamento via GUI...")
-app.iniciar_processamento()
+app.iniciar_roteamento()
 time.sleep(1.5)
 
 # --- 5. VALIDAÇÕES CRÍTICAS DO DOMÍNIO ---
@@ -106,15 +115,17 @@ zips = [f for f in os.listdir(pasta_gerada) if f.endswith(".zip")]
 assert len(zips) == 1, "ZIP logico master nao empacotado."
 
 # Checando Asserções de Texto da GUI (Garante Analytics Perfeito pro Usuário)
-args_lbl, kwargs_lbl = app.lbl_status.configure.call_args
-texto_ui = kwargs_lbl['text']
+args_lbl, kwargs_lbl = app.lbl_lidas.configure.call_args
+texto_ui_lidas = str(kwargs_lbl['text'])
+assert texto_ui_lidas == "6", f"Contagem de Leituras falhou: esperado 6, deu {texto_ui_lidas}"
 
-assert "Lidas: 6" in texto_ui, "Contagem de Leituras falhou"  # 1 de header ignorada + 6 linhas fakes  = 6 lidas de fato! Wait (ignora lidas vazias).
-assert "Inválidas: 2" in texto_ui, "Extrator regex falhou em barrar lixos/menos de 44 dig."
-assert "Duplicadas: 1" in texto_ui, "Deduplicador primario falhou"
-assert "Buscadas: 3" in texto_ui, "Falha na Contagem de Universo Alvo" # 6 - 2 invalidos - 1 dup = 3!
-assert "Encontradas: 2" in texto_ui, "Match hibrido falhou na busca interna do CTe"
-assert "Faltantes: 1" in texto_ui, "Analytics Faltantes quebrado"
+args_lbl, kwargs_lbl = app.lbl_validas.configure.call_args
+texto_ui_validas = str(kwargs_lbl['text'])
+assert texto_ui_validas == "3", f"Contagem de Validas falhou: esperado 3, deu {texto_ui_validas}"
+
+args_lbl, kwargs_lbl = app.lbl_baixadas.configure.call_args
+texto_ui_baixadas = str(kwargs_lbl['text'])
+assert texto_ui_baixadas == "2", f"Contagem de Baixadas falhou: esperado 2, deu {texto_ui_baixadas}"
 
 print("[OK] Toda a cadeia lógica de UI exibiu Feedback Realista perfeitamente calibrado!")
 

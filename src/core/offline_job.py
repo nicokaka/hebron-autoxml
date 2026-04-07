@@ -9,9 +9,11 @@ from src.core.matcher_xml import indexar_e_cruzar_xmls
 from src.io_reports.report_writer import gerar_relatorio_excel
 from src.io_reports.zipper import gerar_zip_arquivos
 
-def iniciar_extracao_hibrida(caminho_excel: str, pasta_base_xmls: str, pasta_output_raiz: str) -> dict:
+def iniciar_extracao_hibrida(caminho_excel: str, pasta_base_xmls: str, pasta_output_raiz: str, on_progresso=None) -> dict:
     """Orquestra o fluxo offline de validação e cruzamento de XMLs."""
-    
+    if not on_progresso:
+        on_progresso = lambda msg, atual=None, total=None: None
+
     time_str = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     pasta_sucesso = os.path.join(pasta_output_raiz, f"Processados_{time_str}")
     sub_pasta_xml = os.path.join(pasta_sucesso, "xmls")
@@ -23,12 +25,19 @@ def iniciar_extracao_hibrida(caminho_excel: str, pasta_base_xmls: str, pasta_out
     chaves_validas, chaves_invalidas = classificar_chaves(chaves_impuras)
     chaves_unicas, chaves_duplicadas = remover_duplicadas(chaves_validas)
     
+    on_progresso("Indexando arquivos XML no disco local...")
     set_alvo = frozenset(chaves_unicas)
     dicionario_match, xmls_duplicados = indexar_e_cruzar_xmls(pasta_base_xmls, set_alvo)
     
+    total_validas = len(chaves_unicas)
+    on_progresso(f"Montando pacote de resultados...", 0, total_validas)
+    
     registros_relatorio = []
     
+    total_processadas = 0
     for chave in chaves_unicas:
+        total_processadas += 1
+        on_progresso(f"Empacotando chave {chave}...", total_processadas, total_validas)
         if chave in dicionario_match:
             caminho_origem_xml = dicionario_match[chave]
             nome_arquivo = os.path.basename(caminho_origem_xml)
@@ -80,6 +89,8 @@ def iniciar_extracao_hibrida(caminho_excel: str, pasta_base_xmls: str, pasta_out
     
     caminho_zip = os.path.join(pasta_sucesso, "xmls_encontrados")
     gerar_zip_arquivos(sub_pasta_xml, caminho_zip)
+
+    on_progresso("Concluído", total_validas, total_validas)
 
     return {
         "diretorio_saida": pasta_sucesso,

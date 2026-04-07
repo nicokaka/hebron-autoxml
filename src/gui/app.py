@@ -2,194 +2,339 @@ import os
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox
+from datetime import datetime
 import customtkinter as ctk
 
 from src.core.offline_job import iniciar_extracao_hibrida
+from src.core.online_job import iniciar_download_sefaz
+
+THEME = {
+    "bg_primary":     "#0d1117",
+    "bg_card":        "#161b22",
+    "bg_input":       "#21262d",
+    "border_subtle":  "#30363d",
+    "accent":         "#00d4aa",
+    "accent_hover":   "#00b894",
+    "text_primary":   "#e6edf3",
+    "text_secondary": "#8b949e",
+    "text_success":   "#3fb950",
+    "text_error":     "#ff6b6b",
+    "font_family":    "Segoe UI",
+    "font_mono":      "Consolas"
+}
 
 class HebronApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("HebronAutoXML - Processador Contábil")
-        self.geometry("750x550")
+        self.title("HebronAutoXML - Processador Contábil v2.0")
+        self.geometry("850x720")
         self.resizable(False, False)
         
-        # Tema padrão limpo e sério
+        # Tema Global Base
         ctk.set_appearance_mode("Dark")
-        ctk.set_default_color_theme("blue")
-        
-        # Variáveis de Caminhos
-        self.excel_path = tk.StringVar()
-        self.xml_base_path = tk.StringVar()
-        self.output_path = tk.StringVar()
+        self.configure(fg_color=THEME["bg_primary"])
         
         self.ultima_pasta_gerada = None
+        self.is_processing = False
         
-        self.build_ui()
+        # Variáveis de UI
+        self.modo_ativo = ctk.StringVar(value="Download SEFAZ")
+        self.on_excel_path = tk.StringVar()
+        self.on_pfx_path = tk.StringVar()
+        self.on_senha = tk.StringVar()
+        self.on_out_path = tk.StringVar()
         
-    def build_ui(self):
-        # Título Master
-        header = ctk.CTkLabel(self, text="Sistema de Validação e Limpeza de XMLs", font=ctk.CTkFont(size=20, weight="bold"))
-        header.pack(pady=(20, 30))
-        
-        # Frame Inputs
-        frame_inputs = ctk.CTkFrame(self, fg_color="transparent")
-        frame_inputs.pack(fill="x", padx=40)
-        
-        # --- input excel
-        lbl_excel = ctk.CTkLabel(frame_inputs, text="Planilha de Chaves (Excel):", font=ctk.CTkFont(weight="bold"))
-        lbl_excel.grid(row=0, column=0, sticky="w", pady=(0, 5))
-        
-        row_excel = ctk.CTkFrame(frame_inputs, fg_color="transparent")
-        row_excel.grid(row=1, column=0, sticky="ew", pady=(0, 15))
-        row_excel.columnconfigure(0, weight=1)
-        
-        entry_excel = ctk.CTkEntry(row_excel, textvariable=self.excel_path, width=450)
-        entry_excel.grid(row=0, column=0, sticky="ew", padx=(0, 10))
-        
-        btn_excel = ctk.CTkButton(row_excel, text="Procurar...", width=100, command=self.buscar_excel)
-        btn_excel.grid(row=0, column=1)
+        self.off_excel_path = tk.StringVar()
+        self.off_xml_base = tk.StringVar()
+        self.off_out_path = tk.StringVar()
 
-        # --- input pasta XMLs
-        lbl_xml = ctk.CTkLabel(frame_inputs, text="Pasta de XMLs Base (Raiz Sefaz Fixa):", font=ctk.CTkFont(weight="bold"))
-        lbl_xml.grid(row=2, column=0, sticky="w", pady=(0, 5))
+        self._build_ui()
+        self._sincronizar_campos_modo(self.modo_ativo.get())
         
-        row_xml = ctk.CTkFrame(frame_inputs, fg_color="transparent")
-        row_xml.grid(row=3, column=0, sticky="ew", pady=(0, 15))
-        row_xml.columnconfigure(0, weight=1)
+    def _build_ui(self):
+        self._build_zona_header()
+        self._build_zona_switcher()
+        self._build_zona_form()
+        self._build_zona_progress()
+        self._build_zona_action()
         
-        entry_xml = ctk.CTkEntry(row_xml, textvariable=self.xml_base_path, width=450)
-        entry_xml.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+    def _build_zona_header(self):
+        f = ctk.CTkFrame(self, fg_color="transparent")
+        f.pack(fill="x", padx=40, pady=(25, 10))
         
-        btn_xml = ctk.CTkButton(row_xml, text="Procurar...", width=100, command=self.buscar_pasta_xml)
-        btn_xml.grid(row=0, column=1)
+        lbl_icon = ctk.CTkLabel(f, text="🛡️", font=ctk.CTkFont(size=36))
+        lbl_icon.pack(side="left")
         
-        # --- input pasta Saida
-        lbl_out = ctk.CTkLabel(frame_inputs, text="Pasta de Saída (Onde jogar Resultados):", font=ctk.CTkFont(weight="bold"))
-        lbl_out.grid(row=4, column=0, sticky="w", pady=(0, 5))
+        lbl_title = ctk.CTkLabel(
+            f, text=" HebronAutoXML", 
+            font=ctk.CTkFont(family=THEME["font_family"], size=28, weight="bold"),
+            text_color=THEME["text_primary"]
+        )
+        lbl_title.pack(side="left", anchor="s", pady=(0, 5))
         
-        row_out = ctk.CTkFrame(frame_inputs, fg_color="transparent")
-        row_out.grid(row=5, column=0, sticky="ew", pady=(0, 15))
-        row_out.columnconfigure(0, weight=1)
+        lbl_sub = ctk.CTkLabel(
+            f, text=" v2.0 — Processador Contábil", 
+            font=ctk.CTkFont(family=THEME["font_family"], size=14),
+            text_color=THEME["text_secondary"]
+        )
+        lbl_sub.pack(side="left", anchor="s", padx=10, pady=(0, 8))
+
+    def _build_zona_switcher(self):
+        self.seg_button = ctk.CTkSegmentedButton(
+            self,
+            values=["Download SEFAZ", "Busca Local"],
+            variable=self.modo_ativo,
+            command=self._sincronizar_campos_modo,
+            font=ctk.CTkFont(weight="bold"),
+            selected_color=THEME["accent"],
+            selected_hover_color=THEME["accent_hover"],
+            unselected_color="transparent",
+            unselected_hover_color=THEME["bg_card"],
+            text_color=THEME["text_primary"]
+        )
+        self.seg_button.pack(fill="x", padx=40, pady=(10, 20))
+
+    def _build_zona_form(self):
+        self.frm_card = ctk.CTkFrame(self, fg_color=THEME["bg_card"], border_width=1, border_color=THEME["border_subtle"], corner_radius=8)
+        self.frm_card.pack(fill="x", padx=40)
         
-        entry_out = ctk.CTkEntry(row_out, textvariable=self.output_path, width=450)
-        entry_out.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        self.row_excel = self._criar_input_row("📊 Planilha de Chaves", self.on_excel_path, self._cmd_buscar_excel)
+        self.row_pfx = self._criar_input_row("🔐 Certificado (.pfx)", self.on_pfx_path, self._cmd_buscar_pfx)
+        self.row_xml = self._criar_input_row("📁 Pasta Local (XMLs)", self.off_xml_base, self._cmd_buscar_xml_base)
         
-        btn_out = ctk.CTkButton(row_out, text="Procurar...", width=100, command=self.buscar_pasta_saida)
-        btn_out.grid(row=0, column=1)
+        # Row Especial para Senha
+        self.row_senha = ctk.CTkFrame(self.frm_card, fg_color="transparent")
+        self.row_senha.pack(fill="x", padx=20, pady=10)
         
+        ctk.CTkLabel(self.row_senha, text="🔑 Senha", width=180, anchor="w", font=ctk.CTkFont(weight="bold")).pack(side="left")
+        ctk.CTkEntry(self.row_senha, textvariable=self.on_senha, show="•", fg_color=THEME["bg_input"], border_width=1, width=150).pack(side="left", padx=(0, 10))
         
-        # Action Buttons Area
-        self.frame_actions = ctk.CTkFrame(self, fg_color="transparent")
-        self.frame_actions.pack(fill="x", padx=40, pady=(20, 10))
+        self.row_out = self._criar_input_row("📦 Pasta de Saída", self.on_out_path, self._cmd_buscar_out)
+
+    def _criar_input_row(self, label_text, str_var, cmd):
+        row = ctk.CTkFrame(self.frm_card, fg_color="transparent")
+        row.pack(fill="x", padx=20, pady=10)
         
-        self.btn_processar = ctk.CTkButton(self.frame_actions, text="PROCESSAR", font=ctk.CTkFont(weight="bold", size=15), height=45, fg_color="#228b22", hover_color="#006400", command=self.iniciar_processamento)
-        self.btn_processar.pack(fill="x")
+        lbl = ctk.CTkLabel(row, text=label_text, width=180, anchor="w", font=ctk.CTkFont(weight="bold"), text_color=THEME["text_primary"])
+        lbl.pack(side="left")
         
-        # Area de Status
-        self.lbl_status = ctk.CTkLabel(self, text="Aguardando seleção de arquivos...", text_color="gray")
-        self.lbl_status.pack(pady=(10, 5))
+        entry = ctk.CTkEntry(row, textvariable=str_var, fg_color=THEME["bg_input"], border_width=1, border_color=THEME["border_subtle"])
+        entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
         
-        self.btn_abrir_pasta = ctk.CTkButton(self, text="Abrir Pasta Gerada", fg_color="gray", command=self.abrir_pasta_saida)
-        # Oculto até que haja sucesso. Será renderizado no pack pós sucesso
+        btn = ctk.CTkButton(row, text="Procurar...", width=90, fg_color="transparent", border_width=1, border_color=THEME["border_subtle"], text_color=THEME["text_primary"], hover_color=THEME["bg_primary"], command=cmd)
+        btn.pack(side="right")
+        return row
+
+    def _build_zona_progress(self):
+        f = ctk.CTkFrame(self, fg_color="transparent")
+        f.pack(fill="both", expand=True, padx=40, pady=(20, 10))
         
-    def buscar_excel(self):
-        pth = filedialog.askopenfilename(filetypes=[("Planilhas Excel", "*.xlsx"), ("Todos os Arquivos", "*.*")])
-        if pth:
-            self.excel_path.set(pth)
+        # Barra e textos
+        f_top = ctk.CTkFrame(f, fg_color="transparent")
+        f_top.pack(fill="x", pady=(0, 5))
+        self.lbl_pct = ctk.CTkLabel(f_top, text="0%", text_color=THEME["accent"], font=ctk.CTkFont(weight="bold"))
+        self.lbl_pct.pack(side="left")
+        self.lbl_status = ctk.CTkLabel(f_top, text="Aguardando início...", text_color=THEME["text_secondary"])
+        self.lbl_status.pack(side="right")
+        
+        self.progress_bar = ctk.CTkProgressBar(f, progress_color=THEME["accent"], fg_color=THEME["bg_input"], height=10)
+        self.progress_bar.pack(fill="x", pady=(0, 10))
+        self.progress_bar.set(0)
+        
+        self.log_box = ctk.CTkTextbox(f, height=120, state="disabled", fg_color=THEME["bg_card"], border_width=1, border_color=THEME["border_subtle"], text_color=THEME["accent"], font=ctk.CTkFont(family=THEME["font_mono"]))
+        self.log_box.pack(fill="both", expand=True)
+
+    def _build_zona_action(self):
+        f = ctk.CTkFrame(self, fg_color="transparent")
+        f.pack(fill="x", padx=40, pady=(0, 25))
+        
+        self.btn_processar = ctk.CTkButton(
+            f, text="INICIAR DOWNLOAD", font=ctk.CTkFont(weight="bold", size=15), height=45, 
+            fg_color=THEME["accent"], hover_color=THEME["accent_hover"], text_color="#000000",
+            command=self.iniciar_roteamento
+        )
+        self.btn_processar.pack(fill="x", pady=(0, 15))
+        
+        # Stats
+        self.f_stats = ctk.CTkFrame(f, fg_color="transparent")
+        # Será empacotado durante/depois processamento
+        
+        box_lidas, self.lbl_lidas = self._criar_stat_box("Lidas", "0")
+        box_lidas.pack(side="left", expand=True, padx=5)
+        
+        box_validas, self.lbl_validas = self._criar_stat_box("Válidas", "0", THEME["text_success"])
+        box_validas.pack(side="left", expand=True, padx=5)
+        
+        box_baixadas, self.lbl_baixadas = self._criar_stat_box("Resultados", "0", THEME["accent"])
+        box_baixadas.pack(side="left", expand=True, padx=5)
+        
+        self.btn_abrir_pasta = ctk.CTkButton(f, text="Abrir Pasta de Saída", fg_color="transparent", border_width=1, text_color=THEME["text_primary"], command=self._cmd_abrir_pasta)
+
+    def _criar_stat_box(self, titulo, valor, cor_valor=None):
+        box = ctk.CTkFrame(self.f_stats, fg_color=THEME["bg_card"], border_width=1, border_color=THEME["border_subtle"])
+        ctk.CTkLabel(box, text=titulo, text_color=THEME["text_secondary"], font=ctk.CTkFont(size=11)).pack(pady=(5, 0))
+        lbl_v = ctk.CTkLabel(box, text=valor, text_color=cor_valor or THEME["text_primary"], font=ctk.CTkFont(weight="bold", size=16))
+        lbl_v.pack(pady=(0, 5))
+        return box, lbl_v
+
+    # --- LÓGICA DE UI E CALLBACKS ---
+    def _sincronizar_campos_modo(self, modo):
+        if modo == "Download SEFAZ":
+            self.row_xml.pack_forget()
+            self.row_pfx.pack(fill="x", padx=20, pady=10, before=self.row_senha)
+            self.row_senha.pack(fill="x", padx=20, pady=10, before=self.row_out)
+        else:
+            self.row_pfx.pack_forget()
+            self.row_senha.pack_forget()
+            self.row_xml.pack(fill="x", padx=20, pady=10, before=self.row_out)
+
+    def _cmd_buscar_excel(self):
+        p = filedialog.askopenfilename(filetypes=[("Planilhas", "*.xlsx")])
+        if p:
+            self.on_excel_path.set(p)
+            self.off_excel_path.set(p)
             
-    def buscar_pasta_xml(self):
-        pth = filedialog.askdirectory(title="Selecione a Pasta Contendo os XMLs")
-        if pth:
-            self.xml_base_path.set(pth)
-            
-    def buscar_pasta_saida(self):
-        pth = filedialog.askdirectory(title="Selecione a Pasta de Saída dos Relatórios")
-        if pth:
-            self.output_path.set(pth)
-            
-    def iniciar_processamento(self):
-        if not self.excel_path.get() or not self.xml_base_path.get() or not self.output_path.get():
-            self.mostrar_erro_validacao("STATUS: Preencha todos os três diretórios antes de continuar.")
+    def _cmd_buscar_pfx(self):
+        p = filedialog.askopenfilename(filetypes=[("Certificado", "*.pfx"), ("Todos", "*.*")])
+        if p: self.on_pfx_path.set(p)
+
+    def _cmd_buscar_xml_base(self):
+        p = filedialog.askdirectory()
+        if p: self.off_xml_base.set(p)
+        
+    def _cmd_buscar_out(self):
+        p = filedialog.askdirectory()
+        if p:
+            self.on_out_path.set(p)
+            self.off_out_path.set(p)
+
+    def _log(self, message):
+        timestamp = os.environ.get("MOCK_TIMESTAMP", datetime.now().strftime("%H:%M:%S"))
+        linha = f"[{timestamp}] {message}"
+        
+        self.log_box.configure(state="normal")
+        self.log_box.insert("end", linha + "\n")
+        self.log_box.see("end")
+        self.log_box.configure(state="disabled")
+
+    def _atualizar_progresso(self, msg, atual=None, total=None):
+        self._log(msg)
+        if atual is not None and total is not None and total > 0:
+            pct = atual / total
+            self.progress_bar.set(pct)
+            self.lbl_pct.configure(text=f"{int(pct*100)}%")
+            self.lbl_status.configure(text=f"Processando {atual} de {total}...")
+        elif msg == "Concluído":
+            self.progress_bar.set(1.0)
+            self.lbl_pct.configure(text="100%")
+            self.lbl_status.configure(text="Finalizado.")
+
+    def iniciar_roteamento(self):
+        if self.is_processing: return
+        self.btn_abrir_pasta.pack_forget()
+        self.f_stats.pack_forget()
+        self.log_box.configure(state="normal")
+        self.log_box.delete("1.0", "end")
+        self.log_box.configure(state="disabled")
+        self.progress_bar.configure(progress_color=THEME["accent"])
+        self.progress_bar.set(0)
+        self.lbl_pct.configure(text="0%")
+        
+        if self.modo_ativo.get() == "Download SEFAZ":
+            self._disparar_online()
+        else:
+            self._disparar_offline()
+
+    def _travar_ui(self):
+        self.is_processing = True
+        self.seg_button.configure(state="disabled")
+        self.btn_processar.configure(state="disabled", text="MASTIGANDO... AGUARDE")
+        
+    def _destravar_ui(self):
+        self.is_processing = False
+        self.seg_button.configure(state="normal")
+        self.btn_processar.configure(state="normal", text="INICIAR PROCESSO NOVAMENTE")
+        self.f_stats.pack(fill="x", pady=(0, 10))
+
+    def _disparar_online(self):
+        ex = self.on_excel_path.get()
+        pfx = self.on_pfx_path.get()
+        pwd = self.on_senha.get()
+        out = self.on_out_path.get()
+        amb = "producao" # Travado FSist
+        
+        if not all([ex, pfx, pwd, out]):
+            self._log("[ERRO] Preencha: Excel, Certificado PFX, Senha e Pasta de Saída.")
             return
-
-        if not os.path.isfile(self.excel_path.get()):
-            self.mostrar_erro_validacao("STATUS: A Planilha Excel informada não foi encontrada no disco.")
-            return
-
-        if not os.path.isdir(self.xml_base_path.get()):
-            self.mostrar_erro_validacao("STATUS: A Pasta Base de XMLs informada não existe.")
-            return
-
-        out_path = self.output_path.get()
-        if not os.path.exists(out_path):
-            try:
-                os.makedirs(out_path, exist_ok=True)
-            except Exception:
-                self.mostrar_erro_validacao("STATUS: Não foi possível acessar/criar a pasta de Saída.")
-                return
             
-        self.bloquear_ui_processando()
+        self._travar_ui()
+        self._log("Iniciando Módulo SEFAZ Online...")
         
-        t = threading.Thread(target=self._task_processar)
+        t = threading.Thread(target=self._task_online, args=(ex, pfx, pwd, out, amb))
         t.daemon = True
         t.start()
-        
-    def mostrar_erro_validacao(self, mensagem):
-        self.lbl_status.configure(text=mensagem, text_color="#ff4444")
-        
-    def bloquear_ui_processando(self):
-        self.btn_abrir_pasta.pack_forget()
-        self.btn_processar.configure(state="disabled", text="MASTIGANDO... AGUARDE")
-        self.lbl_status.configure(text="STATUS: Fazendo Parsing e Varrendo a Nuvem Local... O tempo depende dos XMLs.", text_color="#ffd700")
 
-    def _task_processar(self):
+    def _disparar_offline(self):
+        ex = self.off_excel_path.get()
+        base = self.off_xml_base.get()
+        out = self.off_out_path.get()
+        
+        if not all([ex, base, out]):
+            self._log("[ERRO] Preencha: Excel, Pasta Secundária e Pasta de Saída.")
+            return
+
+        self._travar_ui()
+        self._log("Iniciando varredura Offline Local...")
+        
+        t = threading.Thread(target=self._task_offline, args=(ex, base, out))
+        t.daemon = True
+        t.start()
+
+    def _task_online(self, ex, pfx, pwd, out, amb):
         try:
-            resultado = iniciar_extracao_hibrida(
-                self.excel_path.get(),
-                self.xml_base_path.get(),
-                self.output_path.get()
-            )
-            self._agendar_ui_update(lambda: self._on_sucesso(resultado))
-            
+            # Lambda wrapper para jogar update de volta pra main thread
+            cb = lambda m, a=None, t=None: self.after(0, self._atualizar_progresso, m, a, t)
+            res = iniciar_download_sefaz(ex, pfx, pwd, out, amb, on_progresso=cb)
+            self.after(0, self._on_sucesso, res)
         except Exception as e:
-            msg_str = str(e)
-            self._agendar_ui_update(lambda: self._on_erro(msg_str))
-            
-    def _agendar_ui_update(self, callback):
-        """Agendador cross-thread. Será interceptado (mockado) nos testes p/ execução síncrona."""
-        self.after(0, callback)
-            
-    def _on_sucesso(self, res: dict):
-        self.ultima_pasta_gerada = res['diretorio_saida']
-        
-        faltantes = res['total_unicas'] - res['total_encontradas']
-        
-        msg_resumo = (
-            f"Concluído com Sucesso!\n"
-            f"Lidas: {res['total_lidas']} | Inválidas: {res['total_invalidas']} | Duplicadas: {res['total_duplicadas']}\n"
-            f"--- BATERIA DE MATCH ---\n"
-            f"Buscadas: {res['total_unicas']} | Encontradas: {res['total_encontradas']} | Faltantes: {faltantes}"
-        )
-        
-        self.lbl_status.configure(text=msg_resumo, text_color="#00aa00")
-        self.btn_processar.configure(state="normal", text="PROCESSAR NOVAMENTE")
-        self.btn_abrir_pasta.pack(pady=(10, 0))
-        messagebox.showinfo("Sucesso", "Pipeline finalizado! O ZIP e a Planilha nova já foram soltos na pasta.")
-        
-    def _on_erro(self, msg_erro: str):
-        self.lbl_status.configure(text=f"STATUS: ERRO FATAL - {msg_erro}", text_color="#ff4444")
-        self.btn_processar.configure(state="normal", text="TENTAR DE NOVO")
+            self.after(0, self._on_erro, str(e))
 
-    def abrir_pasta_saida(self):
+    def _task_offline(self, ex, base, out):
+        try:
+            cb = lambda m, a=None, t=None: self.after(0, self._atualizar_progresso, m, a, t)
+            res = iniciar_extracao_hibrida(ex, base, out, on_progresso=cb)
+            self.after(0, self._on_sucesso, res)
+        except Exception as e:
+            self.after(0, self._on_erro, str(e))
+
+    def _on_sucesso(self, res: dict):
+        self._destravar_ui()
+        self.ultima_pasta_gerada = res.get('diretorio_saida')
+        
+        self.lbl_lidas.configure(text=str(res.get('total_lidas', 0)))
+        self.lbl_validas.configure(text=str(res.get('total_unicas', 0)))
+        self.lbl_baixadas.configure(text=str(res.get('total_encontradas', 0)))
+        
+        self.btn_abrir_pasta.pack(pady=(10, 0))
+        messagebox.showinfo("Sucesso", "Trabalho Concluído! Verifique a pasta de processados.")
+
+    def _on_erro(self, msg_erro: str):
+        self._destravar_ui()
+        self.progress_bar.configure(progress_color=THEME["text_error"])
+        self._log(f"[FALHA FATAL] {msg_erro}")
+        messagebox.showerror("Erro de Execução", "Falha crítica. Verifique os logs.")
+
+    def _cmd_abrir_pasta(self):
         if self.ultima_pasta_gerada and os.path.isdir(self.ultima_pasta_gerada):
-            import subprocess
-            import sys
-            
-            # Cross-OS open command nativo puro
+            import subprocess, sys
             if sys.platform == "win32":
                 os.startfile(self.ultima_pasta_gerada)
             elif sys.platform == "darwin":
                 subprocess.Popen(["open", self.ultima_pasta_gerada])
             else:
                 subprocess.Popen(["xdg-open", self.ultima_pasta_gerada])
+
+if __name__ == "__main__":
+    app = HebronApp()
+    app.mainloop()
