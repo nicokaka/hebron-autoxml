@@ -60,7 +60,7 @@ class HebronApp(ctk.CTk):
         self._build_zona_action()
         
     def _build_zona_header(self):
-        f = ctk.CTkFrame(self, fg_color="transparent")
+        f = ctk.CTkFrame(self, fg_color=THEME["bg_primary"])
         f.pack(fill="x", padx=40, pady=(25, 10))
         
         lbl_icon = ctk.CTkLabel(f, text="🛡️", font=ctk.CTkFont(size=36))
@@ -89,7 +89,7 @@ class HebronApp(ctk.CTk):
             font=ctk.CTkFont(weight="bold"),
             selected_color=THEME["accent"],
             selected_hover_color=THEME["accent_hover"],
-            unselected_color="transparent",
+            unselected_color=THEME["bg_primary"],
             unselected_hover_color=THEME["bg_card"],
             text_color=THEME["text_primary"]
         )
@@ -104,7 +104,7 @@ class HebronApp(ctk.CTk):
         self.row_xml = self._criar_input_row("📁 Pasta Local (XMLs)", self.off_xml_base, self._cmd_buscar_xml_base)
         
         # Row Especial para Senha
-        self.row_senha = ctk.CTkFrame(self.frm_card, fg_color="transparent")
+        self.row_senha = ctk.CTkFrame(self.frm_card, fg_color=THEME["bg_card"])
         self.row_senha.pack(fill="x", padx=20, pady=10)
         
         ctk.CTkLabel(self.row_senha, text="🔑 Senha", width=180, anchor="w", font=ctk.CTkFont(weight="bold")).pack(side="left")
@@ -113,7 +113,7 @@ class HebronApp(ctk.CTk):
         self.row_out = self._criar_input_row("📦 Pasta de Saída", self.on_out_path, self._cmd_buscar_out)
 
     def _criar_input_row(self, label_text, str_var, cmd):
-        row = ctk.CTkFrame(self.frm_card, fg_color="transparent")
+        row = ctk.CTkFrame(self.frm_card, fg_color=THEME["bg_card"])
         row.pack(fill="x", padx=20, pady=10)
         
         lbl = ctk.CTkLabel(row, text=label_text, width=180, anchor="w", font=ctk.CTkFont(weight="bold"), text_color=THEME["text_primary"])
@@ -122,16 +122,16 @@ class HebronApp(ctk.CTk):
         entry = ctk.CTkEntry(row, textvariable=str_var, fg_color=THEME["bg_input"], border_width=1, border_color=THEME["border_subtle"])
         entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
         
-        btn = ctk.CTkButton(row, text="Procurar...", width=90, fg_color="transparent", border_width=1, border_color=THEME["border_subtle"], text_color=THEME["text_primary"], hover_color=THEME["bg_primary"], command=cmd)
+        btn = ctk.CTkButton(row, text="Procurar...", width=90, fg_color=THEME["bg_card"], border_width=1, border_color=THEME["border_subtle"], text_color=THEME["text_primary"], hover_color=THEME["bg_input"], command=cmd)
         btn.pack(side="right")
         return row
 
     def _build_zona_progress(self):
-        f = ctk.CTkFrame(self, fg_color="transparent")
+        f = ctk.CTkFrame(self, fg_color=THEME["bg_primary"])
         f.pack(fill="both", expand=True, padx=40, pady=(20, 10))
         
         # Barra e textos
-        f_top = ctk.CTkFrame(f, fg_color="transparent")
+        f_top = ctk.CTkFrame(f, fg_color=THEME["bg_primary"])
         f_top.pack(fill="x", pady=(0, 5))
         self.lbl_pct = ctk.CTkLabel(f_top, text="0%", text_color=THEME["accent"], font=ctk.CTkFont(weight="bold"))
         self.lbl_pct.pack(side="left")
@@ -146,7 +146,7 @@ class HebronApp(ctk.CTk):
         self.log_box.pack(fill="both", expand=True)
 
     def _build_zona_action(self):
-        f = ctk.CTkFrame(self, fg_color="transparent")
+        f = ctk.CTkFrame(self, fg_color=THEME["bg_primary"])
         f.pack(fill="x", padx=40, pady=(0, 25))
         
         self.btn_processar = ctk.CTkButton(
@@ -157,7 +157,7 @@ class HebronApp(ctk.CTk):
         self.btn_processar.pack(fill="x", pady=(0, 15))
         
         # Stats
-        self.f_stats = ctk.CTkFrame(f, fg_color="transparent")
+        self.f_stats = ctk.CTkFrame(f, fg_color=THEME["bg_primary"])
         # Será empacotado durante/depois processamento
         
         box_lidas, self.lbl_lidas = self._criar_stat_box("Lidas", "0")
@@ -169,7 +169,7 @@ class HebronApp(ctk.CTk):
         box_baixadas, self.lbl_baixadas = self._criar_stat_box("Resultados", "0", THEME["accent"])
         box_baixadas.pack(side="left", expand=True, padx=5)
         
-        self.btn_abrir_pasta = ctk.CTkButton(f, text="Abrir Pasta de Saída", fg_color="transparent", border_width=1, text_color=THEME["text_primary"], command=self._cmd_abrir_pasta)
+        self.btn_abrir_pasta = ctk.CTkButton(f, text="Abrir Pasta de Saída", fg_color=THEME["bg_primary"], hover_color=THEME["bg_input"], border_width=1, border_color=THEME["border_subtle"], text_color=THEME["text_primary"], command=self._cmd_abrir_pasta)
 
     def _criar_stat_box(self, titulo, valor, cor_valor=None):
         box = ctk.CTkFrame(self.f_stats, fg_color=THEME["bg_card"], border_width=1, border_color=THEME["border_subtle"])

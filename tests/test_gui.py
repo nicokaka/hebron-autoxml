@@ -125,5 +125,12 @@ class TestHebronAppGUI(unittest.TestCase):
         self.assertEqual(kwargs_btn['state'], "normal")
         self.assertTrue(self.app.progress_bar.configure.called)
 
+    def test_app_inicializa_sem_excecao(self):
+        """Garante que HebronApp() não crasha durante build."""
+        try:
+            app = HebronApp()
+        except Exception as e:
+            self.fail(f"HebronApp() crashed on init: {e}")
+
 if __name__ == '__main__':
     unittest.main()

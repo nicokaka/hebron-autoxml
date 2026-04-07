@@ -1,5 +1,5 @@
 # Dependências do HebronAutoXML - MVP 1 Offline
 openpyxl>=3.1.2
-customtkinter>=5.2.0
+customtkinter==5.2.2
 requests>=2.31.0
 cryptography>=41.0.0
