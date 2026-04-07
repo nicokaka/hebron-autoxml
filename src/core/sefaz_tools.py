@@ -72,8 +72,13 @@ def parse_retorno_distribuicao(xml_text: str, is_cte: bool = False) -> Dict[str,
                 'content_b64': doc.text
             })
             
+    ultNSU_tag = retorno.find('dfe:ultNSU', namespaces=ns)
+    maxNSU_tag = retorno.find('dfe:maxNSU', namespaces=ns)
+            
     return {
         'cStat': cStat_tag.text if cStat_tag is not None else None,
         'xMotivo': xMotivo_tag.text if xMotivo_tag is not None else None,
+        'ultNSU': ultNSU_tag.text if ultNSU_tag is not None else '0',
+        'maxNSU': maxNSU_tag.text if maxNSU_tag is not None else '0',
         'docs': docs
     }

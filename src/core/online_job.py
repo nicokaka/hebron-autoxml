@@ -9,7 +9,9 @@ from src.core.deduplicador import remover_duplicadas
 from src.core.classificador_tipo import classificar_por_modelo
 from src.core.cert_manager import CertManager, CertificadoInvalidoError
 from src.core.sefaz_nfe import consultar_nfe_chave
+from src.core.sefaz_distnsu import baixar_lote_nsu
 from src.core.sefaz_cte import consultar_cte_chave
+from src.core.sefaz_tools import obter_chave_interna, descompactar_base64_zip
 from src.io_reports.report_writer import gerar_relatorio_excel
 from src.io_reports.zipper import gerar_zip_arquivos
 
@@ -65,10 +67,53 @@ def iniciar_download_sefaz(
         with cert_mgr.pem_temporario() as (cert_path, key_path):
             total_processadas = 0
             
-            # --- LOOP DE NOTA FISCAL (NFE) ---
-            for chave in chaves_nfe:
+            # --- FASE 1: LOTE DE NOTA FISCAL (distNSU) ---
+            chaves_nfe_pendentes = list(chaves_nfe)
+            
+            if chaves_nfe_pendentes:
+                uf_autor_nsu = chaves_nfe_pendentes[0][:2]
+                on_progresso("[Fase 1] Consultando notas recentes em Lote (NSU) na Sefaz...")
+                
+                ult_nsu = "0"
+                max_nsu = "1"
+                tentativas = 0
+                
+                while int(ult_nsu) < int(max_nsu) and tentativas < 40 and chaves_nfe_pendentes:
+                    resp_nsu = baixar_lote_nsu(cert_path, key_path, uf_autor_nsu, cnpj_base, ult_nsu, ambiente)
+                    
+                    if resp_nsu.get('status') in ('vazio', 'rejeitado_656', 'erro_rede', 'erro_soap'):
+                        if resp_nsu.get('status') == 'rejeitado_656':
+                            registros_relatorio.append({'chave': 'LOTE_NSU', 'status': 'aviso', 'observacao': 'Fase 1 interrompida por atingimento do rate-limit.', 'arquivo_xml': ''})
+                        break
+                        
+                    ult_nsu = resp_nsu.get('ultNSU', ult_nsu)
+                    max_nsu = resp_nsu.get('maxNSU', max_nsu)
+                    
+                    for doc in resp_nsu.get('docs', []):
+                        if 'procNFe' in doc.get('schema', ''):
+                            try:
+                                xml_str = descompactar_base64_zip(doc['content_b64'])
+                                chave_extraida = obter_chave_interna(xml_str)
+                                
+                                if chave_extraida in chaves_nfe_pendentes:
+                                    caminho_xml = os.path.join(sub_pasta_xml, f"NFe_{chave_extraida}.xml")
+                                    with open(caminho_xml, 'w', encoding='utf-8') as f:
+                                        f.write(xml_str)
+                                    registros_relatorio.append({'chave': chave_extraida, 'status': 'baixada_ok', 'observacao': 'Sucesso via Lote (distNSU).', 'arquivo_xml': os.path.basename(caminho_xml)})
+                                    baixadas_com_sucesso += 1
+                                    chaves_nfe_pendentes.remove(chave_extraida)
+                            except Exception:
+                                pass
+                                
+                    on_progresso(f"[Fase 1] Lendo doc {ult_nsu} de {max_nsu} (Restam {len(chaves_nfe_pendentes)} não encontradas no lote)")
+                    tentativas += 1
+                    time.sleep(2.0)
+                    
+            # --- FASE 2: LOOP INDIVIDUAL (NFe consChNFe Fallback) ---
+            # Aqui entra a trava contra cStat 656: Sleep longo para não furar 20/hora.
+            for idx, chave in enumerate(chaves_nfe_pendentes):
                 total_processadas += 1
-                on_progresso(f"[NFe] Baixando {total_processadas} de {total_validas} (Chave: {chave})... Aguarde.", total_processadas, total_validas)
+                on_progresso(f"[Fase 2] Buscando NFe avulsa: {chave} ({len(chaves_nfe_pendentes) - idx} restantes)...", total_processadas, total_validas)
                 
                 try:
                     cert_mgr.verificar_vigencia()
@@ -84,13 +129,19 @@ def iniciar_download_sefaz(
                     caminho_xml = os.path.join(sub_pasta_xml, f"NFe_{chave}.xml")
                     with open(caminho_xml, 'w', encoding='utf-8') as f:
                         f.write(resp['conteudo'])
-                    registros_relatorio.append({'chave': chave, 'status': 'baixada_ok', 'observacao': 'Download validado completo Sefaz.', 'arquivo_xml': os.path.basename(caminho_xml)})
+                    registros_relatorio.append({'chave': chave, 'status': 'baixada_ok', 'observacao': 'Download FASE 2 individual validado.', 'arquivo_xml': os.path.basename(caminho_xml)})
                     baixadas_com_sucesso += 1
+                elif resp['status'] == 'rejeitado' and '656' in resp.get('mensagem', ''):
+                    registros_relatorio.append({'chave': chave, 'status': 'bloqueado_sefaz', 'observacao': 'Bloqueado por 1 hr (cStat 656). Abortando próximas avulsas.', 'arquivo_xml': ''})
+                    break
                 else:
                     registros_relatorio.append({'chave': chave, 'status': resp['status'], 'observacao': resp.get('mensagem', ''), 'arquivo_xml': ''})
                     
-                if total_processadas < total_validas:
-                    time.sleep(1.0) # Taxa de contorno antifraude da SEFAZ
+                if total_processadas < total_validas or idx < len(chaves_nfe_pendentes) - 1:
+                    # Delay super conservador de 180s para nunca levar ban de Consumo Indevido se houverem várias falhas/fora_do_nsu
+                    for s in range(180, 0, -1):
+                        on_progresso(f"⏳ Throttling (SEFAZ Rate Limit: máx 20/hr). Aguardando {s}s para a próxima...", total_processadas, total_validas)
+                        time.sleep(1.0)
                 
             # --- LOOP DE CONHECIMENTO (CTE) ---
             for chave in chaves_cte:
