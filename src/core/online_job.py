@@ -71,8 +71,8 @@ def iniciar_download_sefaz(
             chaves_nfe_pendentes = list(chaves_nfe)
             
             if chaves_nfe_pendentes:
-                uf_autor_nsu = chaves_nfe_pendentes[0][:2]
-                on_progresso("[Fase 1] Consultando notas recentes em Lote (NSU) na Sefaz...")
+                uf_autor_nsu = cert_mgr.get_uf()
+                on_progresso(f"[Fase 1] Consultando notas recentes em Lote (NSU) na Sefaz (UF Origem: {uf_autor_nsu})...")
                 
                 ult_nsu = "0"
                 max_nsu = "1"
@@ -82,6 +82,8 @@ def iniciar_download_sefaz(
                     resp_nsu = baixar_lote_nsu(cert_path, key_path, uf_autor_nsu, cnpj_base, ult_nsu, ambiente)
                     
                     if resp_nsu.get('status') in ('vazio', 'rejeitado_656', 'erro_rede', 'erro_soap'):
+                        motivo = resp_nsu.get('mensagem', 'Nenhum documento retornado na malha')
+                        on_progresso(f"[Fase 1] Lote interrompido/vazio: {resp_nsu.get('status')} — {motivo}")
                         if resp_nsu.get('status') == 'rejeitado_656':
                             registros_relatorio.append({'chave': 'LOTE_NSU', 'status': 'aviso', 'observacao': 'Fase 1 interrompida por atingimento do rate-limit.', 'arquivo_xml': ''})
                         break

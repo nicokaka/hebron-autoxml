@@ -83,6 +83,21 @@ class CertManager:
             raise CertificadoInvalidoError("O CNPJ de base não pôde ser encontrado no corpo do certificado PFX.")
         return cnpj
 
+    def get_uf(self) -> str:
+        """Extrai o código UF IBGE do Subject do certificado (stateOrProvinceName)."""
+        # ISO 3166-2:BR codes
+        ufs = {
+            "AC":"12", "AL":"27", "AP":"16", "AM":"13", "BA":"29", "CE":"23", "DF":"53",
+            "ES":"32", "GO":"52", "MA":"21", "MT":"51", "MS":"50", "MG":"31", "PA":"15",
+            "PB":"25", "PR":"41", "PE":"26", "PI":"22", "RJ":"33", "RN":"24", "RS":"43",
+            "RO":"11", "RR":"14", "SC":"42", "SP":"35", "SE":"28", "TO":"17"
+        }
+        for attr in self._certificate.subject:
+            if getattr(attr.oid, "_name", "") == "stateOrProvinceName":
+                estado = str(attr.value).upper()
+                return ufs.get(estado, "91")
+        return "91"
+
     @contextlib.contextmanager
     def pem_temporario(self):
         """ContextManager que gera arquivos .pem para a lib requests poder se autenticar via mTLS."""

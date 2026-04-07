@@ -81,7 +81,7 @@ class HebronApp(ctk.CTk):
         lbl_title.pack(side="left", anchor="s", pady=(0, 5))
         
         lbl_sub = ctk.CTkLabel(
-            f, text=" v2.0 — Processador Contábil", 
+            f, text=f" v{__version__} — Processador Contábil", 
             font=ctk.CTkFont(family=THEME["font_family"], size=14),
             text_color=THEME["text_secondary"]
         )
