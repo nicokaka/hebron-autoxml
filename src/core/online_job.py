@@ -36,6 +36,7 @@ def iniciar_download_sefaz(
         raise Exception(f"Erro no Certificado: {str(e)}")
         
     on_progresso(f"Certificado OK. CNPJ Extraído: {cnpj_base}")
+    on_progresso(f"🔍 [DEBUG] Iniciando análise para o CNPJ: {cnpj_base}")
     
     time_str = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     pasta_sucesso = os.path.join(pasta_output_raiz, f"Processados_Online_{time_str}")
@@ -71,15 +72,19 @@ def iniciar_download_sefaz(
             chaves_nfe_pendentes = list(chaves_nfe)
             
             if chaves_nfe_pendentes:
-                uf_autor_nsu = cert_mgr.get_uf()
-                on_progresso(f"[Fase 1] Consultando notas recentes em Lote (NSU) na Sefaz (UF Origem: {uf_autor_nsu})...")
+                uf_autor_nsu, uf_raw = cert_mgr.get_uf()
+                on_progresso(f"🔍 [DEBUG] Campo de UF lido do certificado: '{uf_raw}' → Mapeado para Código IBGE: {uf_autor_nsu or 'NÃO ENCONTRADO (tag cUFAutor será omitida no XML)'}")
+                on_progresso(f"[Fase 1] Consultando notas recentes em Lote (NSU) na Sefaz (UF Origem: {uf_autor_nsu or 'Nenhum'})...")
                 
                 ult_nsu = "0"
                 max_nsu = "1"
                 tentativas = 0
                 
                 while int(ult_nsu) < int(max_nsu) and tentativas < 40 and chaves_nfe_pendentes:
+                    on_progresso(f"🔍 [DEBUG] Payload de Requisição distNSU enviado: UF={uf_autor_nsu}, CNPJ={cnpj_base}, ultNSU={ult_nsu}, Ambiente={ambiente}")
                     resp_nsu = baixar_lote_nsu(cert_path, key_path, uf_autor_nsu, cnpj_base, ult_nsu, ambiente)
+                    
+                    on_progresso(f"🔍 [DEBUG] Resposta SEFAZ Recebida: status='{resp_nsu.get('status')}', cStat='{resp_nsu.get('cStat', '?')}', msg='{resp_nsu.get('mensagem', '?')}', total docs={len(resp_nsu.get('docs', []))}")
                     
                     if resp_nsu.get('status') in ('vazio', 'rejeitado_656', 'erro_rede', 'erro_soap'):
                         motivo = resp_nsu.get('mensagem', 'Nenhum documento retornado na malha')
@@ -92,6 +97,7 @@ def iniciar_download_sefaz(
                     max_nsu = resp_nsu.get('maxNSU', max_nsu)
                     
                     for doc in resp_nsu.get('docs', []):
+                        on_progresso(f"🔍 [DEBUG] Processando doc NSU={doc.get('NSU', '?')} -> schema={doc.get('schema', '?')}")
                         if 'procNFe' in doc.get('schema', ''):
                             try:
                                 xml_str = descompactar_base64_zip(doc['content_b64'])

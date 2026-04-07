@@ -83,20 +83,27 @@ class CertManager:
             raise CertificadoInvalidoError("O CNPJ de base não pôde ser encontrado no corpo do certificado PFX.")
         return cnpj
 
-    def get_uf(self) -> str:
-        """Extrai o código UF IBGE do Subject do certificado (stateOrProvinceName)."""
-        # ISO 3166-2:BR codes
+    def get_uf(self) -> Tuple[Optional[str], str]:
+        """Extrai o código UF IBGE do Subject do certificado (stateOrProvinceName). Return (codigo_uf, valor_bruto)"""
         ufs = {
             "AC":"12", "AL":"27", "AP":"16", "AM":"13", "BA":"29", "CE":"23", "DF":"53",
             "ES":"32", "GO":"52", "MA":"21", "MT":"51", "MS":"50", "MG":"31", "PA":"15",
             "PB":"25", "PR":"41", "PE":"26", "PI":"22", "RJ":"33", "RN":"24", "RS":"43",
-            "RO":"11", "RR":"14", "SC":"42", "SP":"35", "SE":"28", "TO":"17"
+            "RO":"11", "RR":"14", "SC":"42", "SP":"35", "SE":"28", "TO":"17",
+            "ACRE":"12","ALAGOAS":"27","AMAPA":"16","AMAZONAS":"13","BAHIA":"29",
+            "CEARA":"23","DISTRITO FEDERAL":"53","ESPIRITO SANTO":"32","GOIAS":"52",
+            "MARANHAO":"21","MATO GROSSO":"51","MATO GROSSO DO SUL":"50",
+            "MINAS GERAIS":"31","PARA":"15","PARAIBA":"25","PARANA":"41",
+            "PERNAMBUCO":"26","PIAUI":"22","RIO DE JANEIRO":"33",
+            "RIO GRANDE DO NORTE":"24","RIO GRANDE DO SUL":"43","RONDONIA":"11",
+            "RORAIMA":"14","SANTA CATARINA":"42","SAO PAULO":"35","SERGIPE":"28",
+            "TOCANTINS":"17"
         }
         for attr in self._certificate.subject:
             if getattr(attr.oid, "_name", "") == "stateOrProvinceName":
-                estado = str(attr.value).upper()
-                return ufs.get(estado, "91")
-        return "91"
+                estado = str(attr.value)
+                return ufs.get(estado.upper().strip(), None), estado
+        return None, "(campo não encontrado no certificado)"
 
     @contextlib.contextmanager
     def pem_temporario(self):

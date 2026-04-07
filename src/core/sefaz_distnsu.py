@@ -8,6 +8,8 @@ def _payload_distnsu(uf_autor: str, cnpj: str, ult_nsu: str, ambiente: str) -> s
     # Preenche com zeros à esquerda até 15 dígitos
     ult_nsu = str(ult_nsu).zfill(15)
     
+    tag_uf = f"          <cUFAutor>{uf_autor}</cUFAutor>\n" if uf_autor else ""
+    
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
   <soap12:Body>
@@ -15,8 +17,7 @@ def _payload_distnsu(uf_autor: str, cnpj: str, ult_nsu: str, ambiente: str) -> s
       <nfeDadosMsg>
         <distDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01">
           <tpAmb>{tp_amb}</tpAmb>
-          <cUFAutor>{uf_autor}</cUFAutor>
-          <CNPJ>{cnpj}</CNPJ>
+{tag_uf}          <CNPJ>{cnpj}</CNPJ>
           <distNSU>
             <ultNSU>{ult_nsu}</ultNSU>
           </distNSU>
