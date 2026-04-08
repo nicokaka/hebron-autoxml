@@ -13,6 +13,10 @@ from src.core.sefaz_distnsu import baixar_lote_nsu
 from src.core.sefaz_cte import consultar_cte_chave
 from src.core.sefaz_tools import obter_chave_interna, descompactar_base64_zip
 from src.core.nsu_cache import get_cached_nsu, save_nsu
+from src.core.checkpoint_manager import (
+    get_downloaded, mark_downloaded, mark_blocked,
+    get_cooldown_remaining, clear_blocked, try_recover_xml
+)
 from src.io_reports.report_writer import gerar_relatorio_excel
 from src.io_reports.zipper import gerar_zip_arquivos
 
@@ -133,36 +137,76 @@ def iniciar_download_sefaz(
                     time.sleep(0.5)
                     
             # --- FASE 2: LOOP INDIVIDUAL (NFe consChNFe Fallback) ---
-            # Aqui entra a trava contra cStat 656: Sleep longo para não furar 20/hora.
-            for idx, chave in enumerate(chaves_nfe_pendentes):
-                total_processadas += 1
-                on_progresso(f"[Fase 2] Buscando NFe avulsa: {chave} ({len(chaves_nfe_pendentes) - idx} restantes)...", total_processadas, total_validas)
-                
-                try:
-                    cert_mgr.verificar_vigencia()
-                except CertificadoInvalidoError as e:
-                    registros_relatorio.append({'chave': chave, 'status': 'certificado_expirado', 'observacao': str(e), 'arquivo_xml': ''})
-                    break
-                    
-                resp = consultar_nfe_chave(cert_path, key_path, cnpj_base, chave, ambiente)
-                
-                if resp['status'] == 'sucesso_xml':
-                    caminho_xml = os.path.join(sub_pasta_xml, f"NFe_{chave}.xml")
-                    with open(caminho_xml, 'w', encoding='utf-8') as f:
-                        f.write(resp['conteudo'])
-                    registros_relatorio.append({'chave': chave, 'status': 'baixada_ok', 'observacao': 'Download FASE 2 individual validado.', 'arquivo_xml': os.path.basename(caminho_xml)})
-                    baixadas_com_sucesso += 1
-                elif resp['status'] == 'rejeitado' and '656' in resp.get('mensagem', ''):
-                    registros_relatorio.append({'chave': chave, 'status': 'bloqueado_sefaz', 'observacao': 'Bloqueado por 1 hr (cStat 656). Abortando próximas avulsas.', 'arquivo_xml': ''})
-                    break
-                else:
-                    registros_relatorio.append({'chave': chave, 'status': resp['status'], 'observacao': resp.get('mensagem', ''), 'arquivo_xml': ''})
-                    
-                if total_processadas < total_validas or idx < len(chaves_nfe_pendentes) - 1:
-                    # Delay otimizado de 3s - Fase 2 (consChNFe) não sofre do rate-limit distNSU pesado
-                    for s in range(3, 0, -1):
-                        on_progresso(f"⏳ Aguardando {s}s de resfriamento para a próxima chave prevenida...", total_processadas, total_validas)
-                        time.sleep(1.0)
+            # Com checkpoint: retoma de onde parou, skipando chaves já baixadas.
+            chaves_ja_baixadas = get_downloaded(cnpj_base, ambiente)
+            chaves_puladas_ck = {c: info for c, info in chaves_ja_baixadas.items() if c in chaves_nfe_pendentes}
+            chaves_fase2 = [c for c in chaves_nfe_pendentes if c not in chaves_ja_baixadas]
+
+            # Recuperar XMLs de sessões anteriores
+            if chaves_puladas_ck:
+                on_progresso(f"[Fase 2] ♻️  Recuperando {len(chaves_puladas_ck)} chave(s) do checkpoint de sessões anteriores...")
+                for chave_ck, info_ck in chaves_puladas_ck.items():
+                    total_processadas += 1
+                    arquivo_recuperado = try_recover_xml(chave_ck, info_ck, sub_pasta_xml)
+                    if arquivo_recuperado:
+                        on_progresso(f"[Fase 2] ✅ {chave_ck[:20]}... → arquivo copiado da sessão anterior.")
+                        registros_relatorio.append({'chave': chave_ck, 'status': 'baixada_ok', 'observacao': 'Recuperado do checkpoint (sessão anterior).', 'arquivo_xml': arquivo_recuperado})
+                        baixadas_com_sucesso += 1
+                    else:
+                        # Arquivo original foi movido/deletado — precisa re-baixar
+                        on_progresso(f"[Fase 2] ⚠️  Arquivo anterior não encontrado para {chave_ck[:20]}... — adicionando para re-download.")
+                        chaves_fase2.append(chave_ck)
+
+            # Verificar cooldown ativo de execução anterior
+            cooldown_secs = get_cooldown_remaining(cnpj_base, ambiente)
+            if cooldown_secs > 0 and chaves_fase2:
+                mins_cd, secs_cd = divmod(cooldown_secs, 60)
+                on_progresso(f"[Fase 2] ⏱️  Rate-limit SEFAZ ativo — {mins_cd}min {secs_cd}s restantes.")
+                on_progresso(f"[Fase 2] {len(chaves_fase2)} chave(s) pendentes. Re-execute o programa quando o tempo acabar.")
+                for c in chaves_fase2:
+                    total_processadas += 1
+                    registros_relatorio.append({'chave': c, 'status': 'aguardando_cooldown', 'observacao': f'Rate-limit SEFAZ ativo. Re-execute em ~{mins_cd}min {secs_cd}s.', 'arquivo_xml': ''})
+            else:
+                # Cooldown expirou ou nunca foi bloqueado: limpar flag e processar
+                clear_blocked(cnpj_base, ambiente)
+
+                for idx, chave in enumerate(chaves_fase2):
+                    total_processadas += 1
+                    on_progresso(f"[Fase 2] Buscando NFe avulsa: {chave} ({len(chaves_fase2) - idx} restantes)...", total_processadas, total_validas)
+
+                    try:
+                        cert_mgr.verificar_vigencia()
+                    except CertificadoInvalidoError as e:
+                        registros_relatorio.append({'chave': chave, 'status': 'certificado_expirado', 'observacao': str(e), 'arquivo_xml': ''})
+                        break
+
+                    resp = consultar_nfe_chave(cert_path, key_path, cnpj_base, chave, ambiente)
+
+                    if resp['status'] == 'sucesso_xml':
+                        caminho_xml = os.path.join(sub_pasta_xml, f"NFe_{chave}.xml")
+                        with open(caminho_xml, 'w', encoding='utf-8') as f:
+                            f.write(resp['conteudo'])
+                        registros_relatorio.append({'chave': chave, 'status': 'baixada_ok', 'observacao': 'Download FASE 2 individual validado.', 'arquivo_xml': os.path.basename(caminho_xml)})
+                        baixadas_com_sucesso += 1
+                        mark_downloaded(cnpj_base, ambiente, chave, caminho_xml)  # ← Salva no checkpoint
+
+                    elif resp['status'] == 'rejeitado_656':
+                        mark_blocked(cnpj_base, ambiente)  # ← Registra bloqueio com timestamp
+                        pendentes_restantes = len(chaves_fase2) - idx - 1
+                        on_progresso(f"[Fase 2] ⛔ Rate-limit SEFAZ (656). {pendentes_restantes} chave(s) pendentes. Re-execute em ~1 hora (checkpoint salvo).")
+                        registros_relatorio.append({'chave': chave, 'status': 'bloqueado_sefaz', 'observacao': f'Rate-limit SEFAZ (656). {pendentes_restantes} chave(s) pendentes. Re-execute em ~1h.', 'arquivo_xml': ''})
+                        break
+
+                    elif resp['status'] == 'sucesso_resumo':
+                        registros_relatorio.append({'chave': chave, 'status': 'sucesso_resumo', 'observacao': resp.get('mensagem', ''), 'arquivo_xml': ''})
+
+                    else:
+                        registros_relatorio.append({'chave': chave, 'status': resp['status'], 'observacao': resp.get('mensagem', ''), 'arquivo_xml': ''})
+
+                    if idx < len(chaves_fase2) - 1:
+                        for s in range(3, 0, -1):
+                            on_progresso(f"⏳ Aguardando {s}s de resfriamento...", total_processadas, total_validas)
+                            time.sleep(1.0)
                 
             # --- LOOP DE CONHECIMENTO (CTE) ---
             for chave in chaves_cte:

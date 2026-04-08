@@ -86,6 +86,10 @@ def consultar_nfe_chave(cert_path: str, key_path: str, cnpj: str, chave: str, am
     if cStat == "137":
         return {'status': 'nao_encontrada', 'mensagem': "Nenhum documento encontrado (cStat 137)."}
 
+    # Rate-limit: deve ser detectado antes de qualquer verificação de docs
+    if cStat == "656":
+        return {'status': 'rejeitado_656', 'mensagem': f"cStat 656 — {xMotivo}"}
+
     if not dados_parsed['docs']:
         return {'status': 'rejeitado', 'mensagem': f"cStat {cStat} retornado sem documentos limpos: {xMotivo}"}
 
