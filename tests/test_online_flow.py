@@ -13,6 +13,7 @@ def base_mocks(mock_temp_dir):
          patch("src.core.online_job.enviar_manifestacao") as mock_manifestar, \
          patch("src.core.online_job.baixar_lote_nsu") as mock_distnsu, \
          patch("src.core.online_job.consultar_nfe_chave") as mock_consch, \
+         patch("src.core.online_job.SefazPortalScraper") as MockScraper, \
          patch("src.core.online_job.time.sleep") as mock_sleep, \
          patch("src.core.online_job.get_cached_nsu", return_value="100"), \
          patch("src.core.online_job.save_nsu"), \
@@ -30,6 +31,12 @@ def base_mocks(mock_temp_dir):
         mock_cert.get_uf.return_value = ("26", "PE")
         mock_cert.pem_temporario.return_value.__enter__.return_value = ("cert.pem", "key.pem")
         MockCertManager.return_value = mock_cert
+
+        # Por padrão o Playwright scraper retorna dict vazio (nenhuma chave processada)
+        # Os testes individuais podem sobrescrever com mock_scraper.return_value.baixar_xmls.return_value
+        mock_scraper_instance = MagicMock()
+        mock_scraper_instance.baixar_xmls.return_value = {}
+        MockScraper.return_value = mock_scraper_instance
         
         yield {
             "cert": mock_cert,
@@ -39,6 +46,8 @@ def base_mocks(mock_temp_dir):
             "manifestar": mock_manifestar,
             "distnsu": mock_distnsu,
             "consch": mock_consch,
+            "scraper_cls": MockScraper,
+            "scraper": mock_scraper_instance,
             "sleep": mock_sleep,
             "dir": mock_temp_dir
         }
@@ -76,19 +85,23 @@ def test_flow_happy_path(base_mocks):
 
 def test_flow_fallback_and_656(base_mocks):
     """
-    Testa o limite 656. O distNSU nao acha a nota, entao cai pro Fallback.
-    O fallback toma 656 e da hard stop.
+    Testa o limite 656.
+    Playwright retorna vazio (nenhuma chave) -> cai pro WebService legado.
+    O 1º consChNFe toma 656 -> hard stop.
     """
     m = base_mocks
-    # Configuramos chaves de SAIDA, pra pular a manifestacao/distnsu e ir direto fallback
-    m["ler"].return_value = [CHAVE_SAIDA, CHAVE_SAIDA.replace("4", "5")] # Duas de saida
+    # Chaves de SAIDA: pula manifestação/distNSU, vai direto pro Passo 4
+    m["ler"].return_value = [CHAVE_SAIDA, CHAVE_SAIDA.replace("4", "5")]
     m["classificar"].return_value = ([CHAVE_SAIDA, CHAVE_SAIDA.replace("4", "5")], [])
     m["dedup"].return_value = ([CHAVE_SAIDA, CHAVE_SAIDA.replace("4", "5")], [])
     
-    # O lote distNSU retorna vazio
+    # distNSU retorna vazio
     m["distnsu"].return_value = {'status': 'vazio', 'ultNSU': '100', 'maxNSU': '100'}
+
+    # Playwright não baixa nenhuma (retorna dict vazio -> chaves_para_legado = todas)
+    m["scraper"].baixar_xmls.return_value = {}
     
-    # 1ª tentativa fallback da 656
+    # 1ª tentativa WebService dá 656
     m["consch"].return_value = {'status': 'rejeitado_656', 'mensagem': 'Rate-limit'}
     
     logs = []

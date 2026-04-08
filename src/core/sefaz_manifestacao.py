@@ -278,7 +278,7 @@ def enviar_manifestacao(
     headers = {"Content-Type": _SOAP_ACTION}
     headers["Accept"] = "application/soap+xml; charset=utf-8"
 
-    # Lê cert/key em bytes para o signxml
+    # Lê cert/key em bytes para a assinatura manual RSA-SHA1
     with open(cert_path, "rb") as f:
         cert_pem = f.read()
     with open(key_path, "rb") as f:

@@ -14,6 +14,7 @@ from src.core.sefaz_tools import obter_chave_interna, descompactar_base64_zip
 from src.core.nsu_cache import get_cached_nsu, save_nsu
 from src.core.triagem import classificar_entrada_saida, calcular_eta
 from src.core.sefaz_manifestacao import enviar_manifestacao
+from src.core.portal_scraper import SefazPortalScraper, PlaywrightIndisponivel
 from src.core.checkpoint_manager import (
     get_downloaded, mark_downloaded, mark_blocked,
     get_cooldown_remaining, clear_blocked, try_recover_xml
@@ -282,12 +283,84 @@ def iniciar_download_sefaz(
                     registros_relatorio.append({'chave': c, 'status': 'aguardando_cooldown', 'observacao': f'Rate-limit ativo. Re-execute em ~{mins_cd}min {secs_cd}s.', 'arquivo_xml': ''})
             elif chaves_fallback:
                 clear_blocked(cnpj_base, ambiente)
-                on_progresso(f"[Passo 4] Fallback individual: {len(chaves_fallback)} chave(s) | Intervalo: 180s (nunca toma 656).")
 
-                for idx, chave in enumerate(chaves_fallback):
+                # ═══════════════════════════════════════════════════════════════
+                # PASSO 4A: PLAYWRIGHT SCRAPER (Portal Web — sem rate-limit)
+                # ═══════════════════════════════════════════════════════════════
+                chaves_para_legado = list(chaves_fallback)  # fallback segurança
+
+                try:
+                    on_progresso("─" * 50)
+                    on_progresso(
+                        f"[Passo 4] 🌐 Portal SEFAZ (Playwright): "
+                        f"{len(chaves_fallback)} chave(s) — sem rate-limit."
+                    )
+                    scraper = SefazPortalScraper(on_progresso=on_progresso)
+                    resultados_pw = scraper.baixar_xmls(chaves_fallback, sub_pasta_xml)
+
+                    # Processar resultados do Playwright
+                    chaves_para_legado = []
+                    chaves_processadas_pw = set()
+
+                    for chave_pw, status_pw in resultados_pw.items():
+                        chaves_processadas_pw.add(chave_pw)
+                        total_processadas += 1
+                        if status_pw == "sucesso_xml":
+                            caminho_xml = os.path.join(sub_pasta_xml, f"NFe_{chave_pw}.xml")
+                            baixadas_com_sucesso += 1
+                            mark_downloaded(cnpj_base, ambiente, chave_pw, caminho_xml)
+                            registros_relatorio.append({
+                                'chave': chave_pw, 'status': 'baixada_ok',
+                                'observacao': 'Download via Portal SEFAZ (Playwright).',
+                                'arquivo_xml': os.path.basename(caminho_xml)
+                            })
+                        elif status_pw == "sucesso_resumo":
+                            registros_relatorio.append({
+                                'chave': chave_pw, 'status': 'sucesso_resumo',
+                                'observacao': 'Portal retornou apenas resumo visual.',
+                                'arquivo_xml': ''
+                            })
+                        else:
+                            # captcha_timeout, erro_pagina, etc → WebService legado
+                            chaves_para_legado.append(chave_pw)
+                            registros_relatorio.append({
+                                'chave': chave_pw, 'status': status_pw,
+                                'observacao': f'Playwright: {status_pw}. Tentando via WebService.',
+                                'arquivo_xml': ''
+                            })
+
+                    # Chaves que o scraper não chegou a processar (ex: falha antes do loop)
+                    for chave_nproc in chaves_fallback:
+                        if chave_nproc not in chaves_processadas_pw:
+                            chaves_para_legado.append(chave_nproc)
+
+
+                except PlaywrightIndisponivel:
+                    on_progresso(
+                        "[Passo 4] ⚠️  Playwright não disponível. "
+                        "Usando fallback WebService (180s/chave)."
+                    )
+                    chaves_para_legado = list(chaves_fallback)
+
+                except Exception as e_pw:
+                    on_progresso(f"[Passo 4] ⚠️  Playwright falhou ({e_pw}). WebService como segurança.")
+                    chaves_para_legado = list(chaves_fallback)
+
+                # ═══════════════════════════════════════════════════════════════
+                # PASSO 4B: LEGADO consChNFe (backup — 180s por chave)
+                # ═══════════════════════════════════════════════════════════════
+                if chaves_para_legado:
+                    on_progresso("─" * 50)
+                    on_progresso(
+                        f"[Passo 4B] Fallback WebService: "
+                        f"{len(chaves_para_legado)} chave(s) | 180s/chave."
+                    )
+
+
+                for idx, chave in enumerate(chaves_para_legado):
                     total_processadas += 1
                     on_progresso(
-                        f"[Passo 4] consChNFe {idx + 1}/{len(chaves_fallback)}: {chave}...",
+                        f"[Passo 4B] consChNFe {idx + 1}/{len(chaves_para_legado)}: {chave}...",
                         total_processadas, total_validas
                     )
 
@@ -303,17 +376,16 @@ def iniciar_download_sefaz(
                         caminho_xml = os.path.join(sub_pasta_xml, f"NFe_{chave}.xml")
                         with open(caminho_xml, 'w', encoding='utf-8') as f:
                             f.write(resp['conteudo'])
-                        registros_relatorio.append({'chave': chave, 'status': 'baixada_ok', 'observacao': 'Download via Fallback consChNFe.', 'arquivo_xml': os.path.basename(caminho_xml)})
+                        registros_relatorio.append({'chave': chave, 'status': 'baixada_ok', 'observacao': 'Download via Fallback consChNFe (WebService).', 'arquivo_xml': os.path.basename(caminho_xml)})
                         baixadas_com_sucesso += 1
                         mark_downloaded(cnpj_base, ambiente, chave, caminho_xml)
 
                     elif resp['status'] == 'rejeitado_656':
-                        # HARD STOP — zero requisições adicionais para não resetar o cronômetro
                         mark_blocked(cnpj_base, ambiente)
-                        pendentes = len(chaves_fallback) - idx - 1
-                        on_progresso(f"[Passo 4] ⛔ cStat 656. HARD STOP. {pendentes} chave(s) salvas no checkpoint. Re-execute em ~1h.")
+                        pendentes = len(chaves_para_legado) - idx - 1
+                        on_progresso(f"[Passo 4B] ⛔ cStat 656. HARD STOP. {pendentes} chave(s) salvas no checkpoint. Re-execute em ~1h.")
                         registros_relatorio.append({'chave': chave, 'status': 'bloqueado_sefaz', 'observacao': f'cStat 656. Hard Stop. {pendentes} pendentes. Re-execute em ~1h.', 'arquivo_xml': ''})
-                        break   # ← Hard Stop absoluto, sem nenhuma tentativa adicional
+                        break
 
                     elif resp['status'] == 'sucesso_resumo':
                         registros_relatorio.append({'chave': chave, 'status': 'sucesso_resumo', 'observacao': resp.get('mensagem', ''), 'arquivo_xml': ''})
@@ -321,12 +393,12 @@ def iniciar_download_sefaz(
                     else:
                         registros_relatorio.append({'chave': chave, 'status': resp['status'], 'observacao': resp.get('mensagem', ''), 'arquivo_xml': ''})
 
-                    # Delay de 180s entre cada chave (1 req/3min = nunca estoura 20/hora)
-                    if idx < len(chaves_fallback) - 1:
+                    # Delay de 180s entre cada chave
+                    if idx < len(chaves_para_legado) - 1:
                         on_progresso(f"   ⏳ Resfriamento de 3 min antes da próxima chave...", total_processadas, total_validas)
                         for s in range(180, 0, -1):
                             mins_s, secs_s = divmod(s, 60)
-                            if s % 30 == 0 or s <= 10:   # Log a cada 30s e nos últimos 10s
+                            if s % 30 == 0 or s <= 10:
                                 on_progresso(f"   ⏳ {mins_s}min {secs_s:02d}s restantes...", total_processadas, total_validas)
                             time.sleep(1)
 
