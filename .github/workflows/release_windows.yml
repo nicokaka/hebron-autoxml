@@ -28,6 +28,10 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
+      - name: Instalar Playwright Chromium
+        run: |
+          playwright install chromium --with-deps
+
       - name: Executar Testes de Regressão
         env:
           PYTHONPATH: .
@@ -53,20 +57,26 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            Output/HebronAutoXML_v2.0_Setup.exe
+            Output/HebronAutoXML_v3.1_Setup.exe
           name: HebronAutoXML ${{ github.ref_name }}
           body: |
             ## HebronAutoXML ${{ github.ref_name }}
 
             Processador automático de XMLs fiscais brasileiros (NF-e / CT-e).
 
+            ### Novidades desta versão
+            - 🌐 Download via Portal SEFAZ (Playwright) — sem rate-limit de 20/hora
+            - ⚡ 48 notas em ~5 minutos (vs 2h24min anterior)
+            - 🛡️ Fallback inteligente: Playwright → WebService → Checkpoint
+
             ### Como instalar
-            1. Baixe o `HebronAutoXML_v2.0_Setup.exe` abaixo
+            1. Baixe o `HebronAutoXML_v3.1_Setup.exe` abaixo
             2. Execute o instalador (não precisa de permissão de administrador)
             3. Clique em avançar e pronto — aparece no Menu Iniciar e no Desktop se quiser
 
             ### Requisitos
             - Windows 10 ou superior (64-bit)
+            - Microsoft Edge ou Chromium (incluído automaticamente)
             - Certificado digital A1 (`.pfx`) para o modo Download SEFAZ
           draft: false
           prerelease: false
