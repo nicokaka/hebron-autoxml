@@ -19,13 +19,17 @@ def test_assinar_evento(cert_fake_pem):
     
     xml_assinado = _assinar_evento(xml_bruto, cert_pem, key_pem)
     
-    # Validar se a assinatura foi aplicada
-    assert "Signature" in xml_assinado
+    # Validar se a assinatura foi aplicada (SEM prefixo ds:)
+    assert "<Signature" in xml_assinado
     assert 'Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"' in xml_assinado
     assert 'Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"' in xml_assinado
     assert 'Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"' in xml_assinado
+    assert "<SignatureValue>" in xml_assinado
+    assert "<X509Certificate>" in xml_assinado
+    assert "<DigestValue>" in xml_assinado
     
-    # Macete xml:id nao pode vazar pro xml final
+    # CRÍTICO: NÃO pode ter prefixo ds: — SEFAZ rejeita com cStat 404
+    assert "ds:" not in xml_assinado
     assert "xml:id" not in xml_assinado
 
 def test_montar_envelope():

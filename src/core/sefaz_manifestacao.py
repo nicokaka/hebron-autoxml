@@ -12,12 +12,15 @@ Fluxo:
        Outros   = Erro, loga e continua
 """
 import os
+import base64
+import hashlib
 from datetime import datetime
 import requests
 import urllib3
 from lxml import etree
-from signxml import XMLSigner, methods
-from signxml.exceptions import InvalidInput
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography import x509
 from typing import Callable, Dict
 
 from src.core.triagem import dh_evento_local
@@ -45,6 +48,7 @@ _NS_NFE   = "http://www.portalfiscal.inf.br/nfe"
 _NS_WSDL  = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"
 _NS_SOAP  = "http://www.w3.org/2003/05/soap-envelope"
 _NS_DSIG  = "http://www.w3.org/2000/09/xmldsig#"
+_C14N_ALG = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
 
 _URL_PROD = "https://www.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx"
 _URL_HOM  = "https://hom.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx"
@@ -83,33 +87,22 @@ def _gerar_xml_evento(cnpj: str, chave: str, tp_amb: str) -> str:
         f'</evento>'
     )
 
-# ─── Burlar bloqueio estrutural do signxml>=3 ────────────────────────────────
-
-class SEFAZ_XMLSigner(XMLSigner):
-    """
-    signxml v3+ não suporta SHA1 por padrão alegando falta de segurança.
-    Mas o WebService de Evento 1.00 da SEFAZ NFe *obriga* o uso de SHA1.
-    Esta classe anula a checagem e permite assinar o arquivo.
-    """
-    def check_deprecated_methods(self):
-        pass
-
-# ─── Passo 2: Assinar o evento (XMLDSig) ─────────────────────────────────────
+# ─── Passo 2: Assinar o evento (XMLDSig manual — sem prefixo ds:) ────────────
 
 def _assinar_evento(xml_evento_str: str, cert_pem: bytes, key_pem: bytes) -> str:
     """
-    Assina o bloco <evento> usando o snippet validado pelo especialista.
+    Assina o bloco <evento> usando RSA-SHA1 / C14N 1.0 SEM prefixo 'ds:'.
+
+    A SEFAZ rejeita cStat 404 ("Uso de prefixo de namespace não permitido")
+    quando detecta <ds:Signature>. Por isso, construímos a assinatura
+    manualmente ao invés de usar signxml, garantindo que <Signature xmlns="...">
+    use namespace default (sem prefixo).
 
     Specs SEFAZ (Evento versao 1.00):
       - Digest:           SHA-1
       - Assinatura:       RSA-SHA1
       - Canonicalização:  C14N 1.0 (sem comentários)
       - Posição:          <Signature> dentro de <evento>, após </infEvento>
-
-    Macete: injeta xml:id provisório para que signxml resolva a URI "#ID..."
-    e remove após assinar para não causar rejeição de schema.
-
-    IMPORTANTE: Não remover o prefixo ds: da <Signature> — SEFAZ aceita.
     """
     parser = etree.XMLParser(remove_blank_text=True)
     root = etree.fromstring(xml_evento_str.encode("utf-8"), parser)
@@ -117,30 +110,58 @@ def _assinar_evento(xml_evento_str: str, cert_pem: bytes, key_pem: bytes) -> str
     inf_evento = root.find(f"{{{_NS_NFE}}}infEvento")
     id_ref = inf_evento.get("Id")
 
-    # Macete: ensina ao lxml/signxml que "Id" é uma âncora válida
-    inf_evento.attrib["{http://www.w3.org/XML/1998/namespace}id"] = id_ref
+    # ── A: Digest SHA-1 do <infEvento> canonicalizado ──
+    c14n_inf = etree.tostring(inf_evento, method="c14n", exclusive=False, with_comments=False)
+    digest_b64 = base64.b64encode(hashlib.sha1(c14n_inf).digest()).decode()
 
-    signer = SEFAZ_XMLSigner(
-        method=methods.enveloped,
-        signature_algorithm="rsa-sha1",
-        digest_algorithm="sha1",
-        c14n_algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
+    # ── B: Montar <SignedInfo> SEM prefixo ds: ──
+    signed_info_xml = (
+        f'<SignedInfo xmlns="{_NS_DSIG}">'
+        f'<CanonicalizationMethod Algorithm="{_C14N_ALG}"/>'
+        f'<SignatureMethod Algorithm="{_NS_DSIG}rsa-sha1"/>'
+        f'<Reference URI="#{id_ref}">'
+        f'<Transforms>'
+        f'<Transform Algorithm="{_NS_DSIG}enveloped-signature"/>'
+        f'<Transform Algorithm="{_C14N_ALG}"/>'
+        f'</Transforms>'
+        f'<DigestMethod Algorithm="{_NS_DSIG}sha1"/>'
+        f'<DigestValue>{digest_b64}</DigestValue>'
+        f'</Reference>'
+        f'</SignedInfo>'
     )
 
-    signed_root = signer.sign(
-        root,
-        key=key_pem,
-        cert=cert_pem,
-        reference_uri=f"#{id_ref}",
+    # ── C: Canonicalizar e assinar <SignedInfo> com RSA-SHA1 ──
+    signed_info_el = etree.fromstring(signed_info_xml.encode("utf-8"), parser)
+    c14n_si = etree.tostring(signed_info_el, method="c14n", exclusive=False, with_comments=False)
+
+    private_key = serialization.load_pem_private_key(key_pem, password=None)
+    raw_sig = private_key.sign(c14n_si, padding.PKCS1v15(), hashes.SHA1())
+    sig_value_b64 = base64.b64encode(raw_sig).decode()
+
+    # ── D: Extrair certificado X509 em DER base64 ──
+    cert_obj = x509.load_pem_x509_certificate(cert_pem)
+    cert_der_b64 = base64.b64encode(
+        cert_obj.public_bytes(serialization.Encoding.DER)
+    ).decode()
+
+    # ── E: Montar <Signature> completa SEM prefixo ds: ──
+    signature_xml = (
+        f'<Signature xmlns="{_NS_DSIG}">'
+        f'{signed_info_xml}'
+        f'<SignatureValue>{sig_value_b64}</SignatureValue>'
+        f'<KeyInfo>'
+        f'<X509Data>'
+        f'<X509Certificate>{cert_der_b64}</X509Certificate>'
+        f'</X509Data>'
+        f'</KeyInfo>'
+        f'</Signature>'
     )
 
-    # Remove o atributo temporário após assinar
-    signed_inf = signed_root.find(f"{{{_NS_NFE}}}infEvento")
-    xml_ns_id = "{http://www.w3.org/XML/1998/namespace}id"
-    if xml_ns_id in signed_inf.attrib:
-        del signed_inf.attrib[xml_ns_id]
+    # ── F: Inserir <Signature> como filha de <evento>, após </infEvento> ──
+    sig_element = etree.fromstring(signature_xml.encode("utf-8"), parser)
+    root.append(sig_element)
 
-    return etree.tostring(signed_root, encoding="unicode")
+    return etree.tostring(root, encoding="unicode")
 
 
 # ─── Passo 3: Montar envelope SOAP 1.2 ───────────────────────────────────────
