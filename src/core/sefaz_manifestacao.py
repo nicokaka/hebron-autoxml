@@ -15,6 +15,7 @@ import requests
 import urllib3
 from lxml import etree
 from signxml import XMLSigner, methods
+from signxml.exceptions import InvalidInput
 from typing import Callable, Dict
 
 from src.core.triagem import dh_evento_local
@@ -63,6 +64,16 @@ def _gerar_xml_evento(cnpj: str, chave: str, tp_amb: str) -> str:
         f'</evento>'
     )
 
+# ─── Burlar bloqueio estrutural do signxml>=3 ────────────────────────────────
+
+class SEFAZ_XMLSigner(XMLSigner):
+    """
+    signxml v3+ não suporta SHA1 por padrão alegando falta de segurança.
+    Mas o WebService de Evento 1.00 da SEFAZ NFe *obriga* o uso de SHA1.
+    Esta classe anula a checagem e permite assinar o arquivo.
+    """
+    def check_deprecated_methods(self):
+        pass
 
 # ─── Passo 2: Assinar o evento (XMLDSig) ─────────────────────────────────────
 
@@ -90,7 +101,7 @@ def _assinar_evento(xml_evento_str: str, cert_pem: bytes, key_pem: bytes) -> str
     # Macete: ensina ao lxml/signxml que "Id" é uma âncora válida
     inf_evento.attrib["{http://www.w3.org/XML/1998/namespace}id"] = id_ref
 
-    signer = XMLSigner(
+    signer = SEFAZ_XMLSigner(
         method=methods.enveloped,
         signature_algorithm="rsa-sha1",
         digest_algorithm="sha1",
