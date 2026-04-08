@@ -1,0 +1,39 @@
+test_classificar_por_modelo (test_classificador_tipo.TestClassificadorTipo.test_classificar_por_modelo) ... ok
+test_valida_fluxo_excel_mock_coluna_b (test_deduplicacao.TestDeduplicacaoProcessamentoBatch.test_valida_fluxo_excel_mock_coluna_b) ... ok
+test_remover_duplicadas (test_deduplicador.TestDeduplicador.test_remover_duplicadas) ... ok
+test_app_inicializa_sem_excecao (test_gui.TestHebronAppGUI.test_app_inicializa_sem_excecao)
+Garante que HebronApp() não crasha durante build. ... ok
+test_bloqueio_interface_durante_processamento (test_gui.TestHebronAppGUI.test_bloqueio_interface_durante_processamento) ... ok
+test_falha_try_catch_trata_exception (test_gui.TestHebronAppGUI.test_falha_try_catch_trata_exception) ... ok
+test_sucesso_fluxo_callbacks_e_resumo (test_gui.TestHebronAppGUI.test_sucesso_fluxo_callbacks_e_resumo) ... ok
+test_validacao_campos_obrigatorios_offline (test_gui.TestHebronAppGUI.test_validacao_campos_obrigatorios_offline) ... FAIL
+test_classificar_chaves (test_key_validator.TestKeyValidator.test_classificar_chaves) ... ok
+test_validar_chave (test_key_validator.TestKeyValidator.test_validar_chave) ... ok
+test_indexar_e_cruzar_xmls (test_matcher_xml.TestMatcherXML.test_indexar_e_cruzar_xmls) ... ok
+test_iniciar_extracao_hibrida (test_offline_job.TestOfflineJob.test_iniciar_extracao_hibrida) ... ok
+test_ler_coluna_b_converte_numeros_excel_corretamente (test_parser_excel.TestParserExcel.test_ler_coluna_b_converte_numeros_excel_corretamente)
+Excel pode armazenar chaves de 44 dígitos como número (int ou float). ... ok
+test_ler_coluna_b_ignora_cabecalho_e_vazios (test_parser_excel.TestParserExcel.test_ler_coluna_b_ignora_cabecalho_e_vazios) ... ok
+
+======================================================================
+FAIL: test_validacao_campos_obrigatorios_offline (test_gui.TestHebronAppGUI.test_validacao_campos_obrigatorios_offline)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\nicolas\.gemini\antigravity\scratch\hebron-autoxml\tests\test_gui.py", line 63, in test_validacao_campos_obrigatorios_offline
+    self.assertIn("[ERRO]", args[1])
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+AssertionError: '[ERRO]' not found in '[11:56:53] Iniciando varredura Offline Local...\n'
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.251s
+
+FAILED (failures=1)
+
+
+---------------- LOG DO TESTE DEDUPLICADOR (B-COLUMN) ----------------
+ [OK] Carga bruta de dados local: 120 linhas literais encontradas.
+ [OK] Carga de chaves impuras/sujas: 0 registros excluídos.
+ [OK] Conjunto Único: Extração de exatas 76 chaves primárias distintas.
+ [OK] Deduplicação concluida: 44 duplicações ejetadas da fila.
+----------------------------------------------------------------------
+

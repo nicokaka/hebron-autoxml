@@ -299,11 +299,44 @@ class HebronApp(ctk.CTk):
         t.daemon = True
         t.start()
 
+    def _alerta_saidas_popup(self, eta: dict) -> bool:
+        """Exibe popup de alerta vermelho quando >80% das chaves são saídas.
+        Retorna True para continuar, False para cancelar."""
+        horas = eta.get('total_horas', '?')
+        total = eta.get('saidas', '?')
+        pct = eta.get('pct_saidas', '?')
+        mensagem = (
+            f"⚠️ ALERTA: {pct}% das notas inseridas ({total}) foram emitidas "
+            f"pelo próprio cliente (Saídas).\n\n"
+            f"O Governo Federal restringe o download destas notas,\n"
+            f"liberando apenas 20 por hora.\n\n"
+            f"⏱️ Tempo estimado de conclusão: {horas} hora(s).\n"
+            f"O computador precisará ficar LIGADO durante todo o processo.\n\n"
+            f"Deseja continuar mesmo assim?"
+        )
+        resultado = messagebox.askyesno(
+            "⚠️ Atenção — Download Demorado",
+            mensagem,
+            icon='warning'
+        )
+        return resultado
+
     def _task_online(self, ex, pfx, pwd, out, amb):
         try:
-            # Lambda wrapper para jogar update de volta pra main thread
             cb = lambda m, a=None, t=None: self.after(0, self._atualizar_progresso, m, a, t)
-            res = iniciar_download_sefaz(ex, pfx, pwd, out, amb, on_progresso=cb)
+            # on_alerta_saidas roda na main thread via after() para poder abrir MessageBox
+            alerta_resultado = [True]  # default: continuar
+            def alerta_cb(eta):
+                import threading as _th
+                ev = _th.Event()
+                def _popup():
+                    alerta_resultado[0] = self._alerta_saidas_popup(eta)
+                    ev.set()
+                self.after(0, _popup)
+                ev.wait(timeout=120)  # aguarda resposta do usuário por até 2 min
+                return alerta_resultado[0]
+
+            res = iniciar_download_sefaz(ex, pfx, pwd, out, amb, on_progresso=cb, on_alerta_saidas=alerta_cb)
             self.after(0, self._on_sucesso, res)
         except Exception as e:
             self.after(0, self._on_erro, str(e))
