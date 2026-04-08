@@ -33,7 +33,7 @@ def test_montar_envelope():
     assert '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">' in envelope
     assert '<nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4">' in envelope
     assert '<idLote>1</idLote>' in envelope
-    assert '<evento>1</evento>\n<evento>2</evento>' in envelope
+    assert '<evento>1</evento><evento>2</evento>' in envelope
 
 def test_parsear_resposta():
     resp_mock = f"""
@@ -52,13 +52,15 @@ def test_parsear_resposta():
         </retEvento>
     </retEnvEvento>
     """
-    res = _parsear_resposta(resp_mock)
+    env_cstat, env_xmotivo, res = _parsear_resposta(resp_mock)
     assert res.get(CHAVE_ENTRADA) == "135"
     assert res.get("OUTRACHAVE") == "573"
 
 def test_parsear_resposta_lixo():
-    assert _parsear_resposta("<html><body>Error</body></html>") == {}
-    assert _parsear_resposta("") == {}
+    _, _, res1 = _parsear_resposta("<html><body>Error</body></html>")
+    assert res1 == {}
+    _, _, res2 = _parsear_resposta("")
+    assert res2 == {}
 
 @patch("src.core.sefaz_manifestacao.requests.post")
 def test_enviar_manifestacao(mock_post, mock_temp_dir, cert_fake_pem):
@@ -70,8 +72,11 @@ def test_enviar_manifestacao(mock_post, mock_temp_dir, cert_fake_pem):
 
     # Setup do mock post
     mock_resp = Mock()
+    mock_resp.status_code = 200
     mock_resp.text = f"""
     <retEnvEvento xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">
+        <cStat>128</cStat>
+        <xMotivo>Lote de Evento Processado</xMotivo>
         <retEvento versao="1.00"><infEvento><chNFe>{CHAVE_ENTRADA}</chNFe><cStat>135</cStat></infEvento></retEvento>
     </retEnvEvento>
     """

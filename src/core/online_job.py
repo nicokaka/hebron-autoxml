@@ -152,18 +152,23 @@ def iniciar_download_sefaz(
                     sucessos_manif = sum(1 for v in resultado_manifestacao.values() if v in ("135", "573"))
                     on_progresso(f"✅ [Passo 1] Manifestação concluída: {sucessos_manif}/{len(entradas)} registradas na SEFAZ.")
                 except Exception as e:
+                    sucessos_manif = 0
                     on_progresso(f"⚠️ [Passo 1] Erro na Manifestação: {e}. Continuando sem ela...")
 
                 # ═══════════════════════════════════════════════════════════════
                 # PASSO 2: DELAY — SEFAZ processa e libera os XMLs na fila
                 # ═══════════════════════════════════════════════════════════════
-                on_progresso("─" * 50)
-                on_progresso("⏳ [Passo 2] Aguardando SEFAZ liberar XMLs na fila (4 minutos)...")
-                for s in range(240, 0, -1):
-                    mins_r, secs_r = divmod(s, 60)
-                    on_progresso(f"   ⏳ {mins_r}min {secs_r:02d}s restantes...")
-                    time.sleep(1)
-                on_progresso("✅ [Passo 2] Delay concluído. Abrindo a torneira do distNSU...")
+                if sucessos_manif > 0:
+                    on_progresso("─" * 50)
+                    on_progresso("⏳ [Passo 2] Aguardando SEFAZ liberar XMLs na fila (4 minutos)...")
+                    for s in range(240, 0, -1):
+                        mins_r, secs_r = divmod(s, 60)
+                        on_progresso(f"   ⏳ {mins_r}min {secs_r:02d}s restantes...")
+                        time.sleep(1)
+                    on_progresso("✅ [Passo 2] Delay concluído. Abrindo a torneira do distNSU...")
+                else:
+                    on_progresso("─" * 50)
+                    on_progresso("⏩ [Passo 2] Pulando delay — nenhuma manifestação registrada. Indo direto ao distNSU/Fallback.")
             else:
                 on_progresso("ℹ️ [Passo 1] Sem entradas para manifestar. Pulando para distNSU.")
 

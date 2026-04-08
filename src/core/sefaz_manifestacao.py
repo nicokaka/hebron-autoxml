@@ -11,6 +11,8 @@ Fluxo:
        cStat 573 = Duplicidade (inofensivo — já manifestado antes)
        Outros   = Erro, loga e continua
 """
+import os
+from datetime import datetime
 import requests
 import urllib3
 from lxml import etree
@@ -21,6 +23,23 @@ from typing import Callable, Dict
 from src.core.triagem import dh_evento_local
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# ─── Diagnóstico SEFAZ ───────────────────────────────────────────────────────
+_DIAG_DIR = os.path.join(os.path.expanduser("~"), ".HebronAutoXML")
+_DIAG_FILE_MANIF = os.path.join(_DIAG_DIR, "diagnostico_manifestacao.log")
+
+def _dump_diagnostico_manif(lote_idx: int, payload: str, status_code: int, response_text: str):
+    """Grava em arquivo o XML enviado e a resposta crua da SEFAZ para debugging."""
+    try:
+        os.makedirs(_DIAG_DIR, exist_ok=True)
+        with open(_DIAG_FILE_MANIF, "a", encoding="utf-8") as f:
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"\n{'='*80}\n")
+            f.write(f"[{ts}] LOTE: {lote_idx}\n")
+            f.write(f"--- PAYLOAD ENVIADO ---\n{payload[:3000]}\n...\n")
+            f.write(f"--- RESPOSTA SEFAZ (HTTP {status_code}) ---\n{response_text}\n")
+    except Exception:
+        pass  # Nunca deixar o diagnóstico quebrar o fluxo principal
 
 _NS_NFE   = "http://www.portalfiscal.inf.br/nfe"
 _NS_WSDL  = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"
@@ -131,7 +150,8 @@ def _montar_envelope(eventos_xml: list, id_lote: int, tp_amb: str) -> str:
     Empacota até 20 <evento> assinados dentro de <envEvento> + SOAP 1.2.
     nfeDadosMsg vai direto no <Body> (sem wrapper adicional).
     """
-    eventos_concat = "\n".join(eventos_xml)
+    # CRÍTICO: NÃO usar "\n".join — whitespace pós-assinatura corrompe C14N e causa cStat 297
+    eventos_concat = "".join(eventos_xml)
     return (
         '<?xml version="1.0" encoding="utf-8"?>'
         f'<soap12:Envelope xmlns:soap12="{_NS_SOAP}">'
@@ -149,15 +169,47 @@ def _montar_envelope(eventos_xml: list, id_lote: int, tp_amb: str) -> str:
 
 # ─── Passo 4: Parsear resposta ────────────────────────────────────────────────
 
-def _parsear_resposta(resp_text: str) -> Dict[str, str]:
+def _parsear_resposta(resp_text: str) -> tuple:
     """
-    Parseia o <retEnvEvento> e retorna {chave: cStat} por evento.
-    cStat 135 = registrado | cStat 573 = duplicidade (OK) | outros = erro
+    Parseia o <retEnvEvento> e retorna:
+      (envelope_cStat, envelope_xMotivo, {chave: cStat})
+
+    Se a SEFAZ rejeitar o lote inteiro (ex: cStat 215 Schema, 297 Assinatura),
+    não haverá tags <retEvento> filhas — apenas o cStat do envelope.
     """
+    envelope_cstat = None
+    envelope_xmotivo = None
     resultado = {}
     try:
         root = etree.fromstring(resp_text.encode("utf-8"))
-        ns = {"nfe": _NS_NFE}
+
+        # 1. Capturar cStat e xMotivo do envelope (retEnvEvento)
+        ret_env = None
+        for el in root.iter(f"{{{_NS_NFE}}}retEnvEvento"):
+            ret_env = el
+            break
+        if ret_env is None:
+            # Fallback: tentar sem namespace (às vezes a SEFAZ usa ns diferente)
+            for el in root.iter():
+                if el.tag.endswith('retEnvEvento'):
+                    ret_env = el
+                    break
+
+        if ret_env is not None:
+            cstat_el = ret_env.find(f"{{{_NS_NFE}}}cStat")
+            xmotivo_el = ret_env.find(f"{{{_NS_NFE}}}xMotivo")
+            if cstat_el is None:
+                # Fallback sem namespace
+                for child in ret_env:
+                    tag = child.tag.split('}')[-1] if '}' in child.tag else child.tag
+                    if tag == 'cStat' and cstat_el is None:
+                        cstat_el = child
+                    if tag == 'xMotivo' and xmotivo_el is None:
+                        xmotivo_el = child
+            envelope_cstat = cstat_el.text if cstat_el is not None else None
+            envelope_xmotivo = xmotivo_el.text if xmotivo_el is not None else None
+
+        # 2. Capturar resultados individuais por chave (se existirem)
         for ret in root.iter(f"{{{_NS_NFE}}}retEvento"):
             inf = ret.find(f"{{{_NS_NFE}}}infEvento")
             if inf is None:
@@ -168,7 +220,7 @@ def _parsear_resposta(resp_text: str) -> Dict[str, str]:
                 resultado[chave_el.text] = cstat_el.text
     except Exception:
         pass
-    return resultado
+    return envelope_cstat, envelope_xmotivo, resultado
 
 
 # ─── Função pública principal ─────────────────────────────────────────────────
@@ -248,7 +300,27 @@ def enviar_manifestacao(
                 verify=False,
                 timeout=30,
             )
-            resultado_lote = _parsear_resposta(resp.text)
+
+            # ── Dump diagnóstico — sempre ativo ──
+            _dump_diagnostico_manif(idx_lote + 1, envelope, resp.status_code, resp.text)
+
+            env_cstat, env_xmotivo, resultado_lote = _parsear_resposta(resp.text)
+
+            # Logar erro de envelope (lote inteiro rejeitado)
+            if env_cstat and env_cstat not in ("128", "135", "136"):
+                on_progresso(
+                    f"[Manifestação] ⛔ SEFAZ REJEITOU O LOTE {idx_lote + 1}: "
+                    f"cStat {env_cstat} — {env_xmotivo}"
+                )
+                on_progresso(
+                    f"[Manifestação] 💡 Diagnóstico salvo em: {_DIAG_FILE_MANIF}"
+                )
+            else:
+                on_progresso(
+                    f"[Manifestação] ✅ Envelope aceito (cStat {env_cstat}). "
+                    f"Processando {len(resultado_lote)} retornos individuais..."
+                )
+
             resultado_global.update(resultado_lote)
 
             sucessos = sum(1 for v in resultado_lote.values() if v in ("135", "573"))
