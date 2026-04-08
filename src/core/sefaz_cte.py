@@ -5,6 +5,7 @@ from src.core.sefaz_tools import descompactar_base64_zip, parse_retorno_distribu
 
 def _payload_cte_chave(uf_autor: str, cnpj: str, chave: str, ambiente: str) -> str:
     tp_amb = "2" if ambiente.lower() == "homologacao" else "1"
+    tag_uf = f"          <cUFAutor>{uf_autor}</cUFAutor>\n" if uf_autor else ""
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
   <soap12:Body>
@@ -12,8 +13,7 @@ def _payload_cte_chave(uf_autor: str, cnpj: str, chave: str, ambiente: str) -> s
       <cteDadosMsg>
         <distDFeInt xmlns="http://www.portalfiscal.inf.br/cte" versao="1.00">
           <tpAmb>{tp_amb}</tpAmb>
-          <cUFAutor>{uf_autor}</cUFAutor>
-          <CNPJ>{cnpj}</CNPJ>
+{tag_uf}          <CNPJ>{cnpj}</CNPJ>
           <consChCTe>
             <chCTe>{chave}</chCTe>
           </consChCTe>

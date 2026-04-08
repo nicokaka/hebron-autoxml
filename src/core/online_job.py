@@ -12,6 +12,7 @@ from src.core.sefaz_nfe import consultar_nfe_chave
 from src.core.sefaz_distnsu import baixar_lote_nsu
 from src.core.sefaz_cte import consultar_cte_chave
 from src.core.sefaz_tools import obter_chave_interna, descompactar_base64_zip
+from src.core.nsu_cache import get_cached_nsu, save_nsu
 from src.io_reports.report_writer import gerar_relatorio_excel
 from src.io_reports.zipper import gerar_zip_arquivos
 
@@ -76,8 +77,9 @@ def iniciar_download_sefaz(
                 on_progresso(f"🔍 [DEBUG] Campo de UF lido do certificado: '{uf_raw}' → Mapeado para Código IBGE: {uf_autor_nsu or 'NÃO ENCONTRADO (tag cUFAutor será omitida no XML)'}")
                 on_progresso(f"[Fase 1] Consultando notas recentes em Lote (NSU) na Sefaz (UF Origem: {uf_autor_nsu or 'Nenhum'})...")
                 
-                ult_nsu = "0"
-                max_nsu = "1"
+                ult_nsu = get_cached_nsu(cnpj_base, ambiente)
+                on_progresso(f"🔍 [DEBUG] ultNSU recuperado da memória (cache): {ult_nsu}")
+                max_nsu = str(int(ult_nsu) + 1)
                 tentativas = 0
                 
                 while int(ult_nsu) < int(max_nsu) and tentativas < 500 and chaves_nfe_pendentes:
@@ -91,6 +93,7 @@ def iniciar_download_sefaz(
                         break
                         
                     ult_nsu = resp_nsu.get('ultNSU', ult_nsu)
+                    save_nsu(cnpj_base, ambiente, ult_nsu)
                     max_nsu = resp_nsu.get('maxNSU', max_nsu)
                     
                     encontradas_neste_lote = 0

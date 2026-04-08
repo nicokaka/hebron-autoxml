@@ -66,9 +66,11 @@ def baixar_lote_nsu(cert_path: str, key_path: str, uf_autor: str, cnpj: str, ult
     # cStat 137: Nenhum documento encontrado
     # cStat 138: Documento(s) localizado(s)
     
+    # Prioridade máxima: bloqueio por consumo indevido. O cStat 656 pode vir com 137 ou docs corrompidos.
+    if cStat == "656":
+        return {'status': 'rejeitado_656', 'mensagem': xMotivo, 'ultNSU': dados_parsed.get('ultNSU', ult_nsu), 'maxNSU': dados_parsed.get('maxNSU', ult_nsu)}
+        
     if cStat == "137" or not dados_parsed.get('docs'):
-        if cStat == "656":
-            return {'status': 'rejeitado_656', 'mensagem': xMotivo, 'ultNSU': dados_parsed.get('ultNSU', ult_nsu), 'maxNSU': dados_parsed.get('maxNSU', ult_nsu)}
         return {'status': 'vazio', 'mensagem': f"{cStat} - {xMotivo}", 'ultNSU': dados_parsed.get('ultNSU', ult_nsu), 'maxNSU': dados_parsed.get('maxNSU', ult_nsu)}
         
     return {
