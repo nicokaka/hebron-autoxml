@@ -81,6 +81,7 @@ def iniciar_download_sefaz(
                 on_progresso(f"🔍 [DEBUG] ultNSU recuperado da memória (cache): {ult_nsu}")
                 max_nsu = str(int(ult_nsu) + 1)
                 tentativas = 0
+                lotes_sem_match = 0
                 
                 while int(ult_nsu) < int(max_nsu) and tentativas < 500 and chaves_nfe_pendentes:
                     resp_nsu = baixar_lote_nsu(cert_path, key_path, uf_autor_nsu, cnpj_base, ult_nsu, ambiente)
@@ -115,6 +116,15 @@ def iniciar_download_sefaz(
                                     encontradas_neste_lote += 1
                             except Exception:
                                 pass
+                    
+                    if encontradas_neste_lote > 0:
+                        lotes_sem_match = 0
+                    else:
+                        lotes_sem_match += 1
+                        
+                    if lotes_sem_match >= 50:
+                        on_progresso("[Fase 1] ⚡ Interrompendo varredura — 50 lotes sem encontrar chaves pendentes. Acelerando processo automático...")
+                        break
                     
                     pct = int((int(ult_nsu) / max(int(max_nsu), 1)) * 100)
                     msg_encontradas = f" ✅ +{encontradas_neste_lote} encontradas!" if encontradas_neste_lote else ""
@@ -151,9 +161,9 @@ def iniciar_download_sefaz(
                     registros_relatorio.append({'chave': chave, 'status': resp['status'], 'observacao': resp.get('mensagem', ''), 'arquivo_xml': ''})
                     
                 if total_processadas < total_validas or idx < len(chaves_nfe_pendentes) - 1:
-                    # Delay super conservador de 180s para nunca levar ban de Consumo Indevido se houverem várias falhas/fora_do_nsu
-                    for s in range(180, 0, -1):
-                        on_progresso(f"⏳ Throttling (SEFAZ Rate Limit: máx 20/hr). Aguardando {s}s para a próxima...", total_processadas, total_validas)
+                    # Delay otimizado de 3s - Fase 2 (consChNFe) não sofre do rate-limit distNSU pesado
+                    for s in range(3, 0, -1):
+                        on_progresso(f"⏳ Aguardando {s}s de resfriamento para a próxima chave prevenida...", total_processadas, total_validas)
                         time.sleep(1.0)
                 
             # --- LOOP DE CONHECIMENTO (CTE) ---
