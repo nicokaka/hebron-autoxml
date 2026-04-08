@@ -2,3 +2,5 @@
 # Usado para gerar o bundle Final Onedir do HebronAutoXML
 
 pyinstaller>=6.5.0
+pytest>=8.0.0
+pytest-cov>=4.0.0

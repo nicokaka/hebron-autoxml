@@ -35,7 +35,7 @@ jobs:
         env:
           PYTHONPATH: .
         run: |
-          python -m unittest discover -s tests -v
+          pytest tests/ -v
 
       - name: Build Executable with PyInstaller
         run: |
