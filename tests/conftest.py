@@ -33,10 +33,10 @@ def cert_fake_pem():
     ).serial_number(
         x509.random_serial_number()
     ).not_valid_before(
-        datetime.datetime.utcnow()
+        datetime.datetime.now(datetime.timezone.utc)
     ).not_valid_after(
         # Valid for 10 days
-        datetime.datetime.utcnow() + datetime.timedelta(days=10)
+        datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=10)
     ).add_extension(
         x509.SubjectAlternativeName([x509.DNSName(u"localhost")]),
         critical=False,

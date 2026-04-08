@@ -41,7 +41,7 @@ def test_calcular_eta_com_alerta():
     eta = calcular_eta(total_entradas=0, total_saidas=100)
     assert eta['alerta_vermelho'] is True
     assert eta['pct_saidas'] == 100
-    assert eta['total_horas'] == 5.0  # 100 * 180s / 3600 = 5.0
+    assert eta['total_horas'] == 0.4  # 100 * 15s (Playwright) / 3600 = 0.42 -> round 0.4
 
 def test_calcular_eta_vazio():
     eta = calcular_eta(total_entradas=0, total_saidas=0)

@@ -239,12 +239,12 @@ def iniciar_download_sefaz(
             on_progresso("─" * 50)
             if baixadas_com_sucesso > 0 and chaves_nfe_pendentes:
                 pct_ok = round(baixadas_com_sucesso / total_validas * 100)
-                eta_fallback_min = len(chaves_nfe_pendentes) * 3
+                eta_fallback_min = round(len(chaves_nfe_pendentes) * 15 / 60, 1)
                 on_progresso(
-                    f"🎉 {baixadas_com_sucesso} nota(s) ({pct_ok}%) baixadas com sucesso! Já podem ser usadas."
+                    f"{baixadas_com_sucesso} nota(s) ({pct_ok}%) baixadas com sucesso! Ja podem ser usadas."
                 )
                 on_progresso(
-                    f"⚠️  {len(chaves_nfe_pendentes)} nota(s) restritas — modo segurança (180s/chave). "
+                    f"[!] {len(chaves_nfe_pendentes)} nota(s) restritas - portal SEFAZ (captcha). "
                     f"ETA: ~{eta_fallback_min} min. Pode minimizar a janela!"
                 )
             elif baixadas_com_sucesso > 0 and not chaves_nfe_pendentes:
@@ -304,8 +304,8 @@ def iniciar_download_sefaz(
 
                     for chave_pw, status_pw in resultados_pw.items():
                         chaves_processadas_pw.add(chave_pw)
-                        total_processadas += 1
                         if status_pw == "sucesso_xml":
+                            total_processadas += 1   # conta 1x: resultado definitivo
                             caminho_xml = os.path.join(sub_pasta_xml, f"NFe_{chave_pw}.xml")
                             baixadas_com_sucesso += 1
                             mark_downloaded(cnpj_base, ambiente, chave_pw, caminho_xml)
@@ -315,21 +315,24 @@ def iniciar_download_sefaz(
                                 'arquivo_xml': os.path.basename(caminho_xml)
                             })
                         elif status_pw == "sucesso_resumo":
+                            total_processadas += 1   # conta 1x: resultado definitivo
                             registros_relatorio.append({
                                 'chave': chave_pw, 'status': 'sucesso_resumo',
                                 'observacao': 'Portal retornou apenas resumo visual.',
                                 'arquivo_xml': ''
                             })
-                        else:
-                            # captcha_timeout, erro_pagina, etc → WebService legado
-                            chaves_para_legado.append(chave_pw)
+                        elif status_pw == "chave_nao_encontrada":
+                            total_processadas += 1   # conta 1x: resultado definitivo
                             registros_relatorio.append({
-                                'chave': chave_pw, 'status': status_pw,
-                                'observacao': f'Playwright: {status_pw}. Tentando via WebService.',
+                                'chave': chave_pw, 'status': 'chave_nao_encontrada',
+                                'observacao': 'Chave nao encontrada no portal SEFAZ.',
                                 'arquivo_xml': ''
                             })
+                        else:
+                            # captcha_timeout/invalido/erro -> legado vai contar ao processar
+                            chaves_para_legado.append(chave_pw)
 
-                    # Chaves que o scraper não chegou a processar (ex: falha antes do loop)
+                    # Chaves que o scraper nao chegou a processar
                     for chave_nproc in chaves_fallback:
                         if chave_nproc not in chaves_processadas_pw:
                             chaves_para_legado.append(chave_nproc)

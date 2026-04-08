@@ -51,11 +51,14 @@ def calcular_eta(total_entradas: int, total_saidas: int) -> dict:
     Calcula o tempo estimado de cada fase para mostrar à operadora.
 
     Fase rápida:  Manifestação (~15s) + Delay (240s) + distNSU (~60s)
-    Fase lenta:   consChNFe com 180s por chave (nunca toma 656)
+    Fase Playwright: ~15s/chave (10s captcha + 5s robô) — SEM rate-limit
+    Fase lenta WebService: 180s/chave apenas se Playwright falhar
     """
     tempo_rapido_seg = (15 + 240 + 60) if total_entradas > 0 else 0
-    tempo_lento_seg = total_saidas * 180
-    total_seg = tempo_rapido_seg + tempo_lento_seg
+    # Playwright é o motor principal: ~15s por chave (captcha manual)
+    # WebService legado (180s) só é usado se Playwright falhar totalmente
+    tempo_playwright_seg = total_saidas * 15
+    total_seg = tempo_rapido_seg + tempo_playwright_seg
 
     total = total_entradas + total_saidas
     pct_saidas = round(total_saidas / max(total, 1) * 100)
@@ -66,7 +69,7 @@ def calcular_eta(total_entradas: int, total_saidas: int) -> dict:
         'total': total,
         'pct_saidas': pct_saidas,
         'fase_rapida_min': round(tempo_rapido_seg / 60, 1),
-        'fase_lenta_min': round(tempo_lento_seg / 60, 1),
+        'fase_lenta_min': round(tempo_playwright_seg / 60, 1),
         'total_min': round(total_seg / 60, 1),
         'total_horas': round(total_seg / 3600, 1),
         'alerta_vermelho': pct_saidas > 80,  # Dispara popup se maioria são saídas

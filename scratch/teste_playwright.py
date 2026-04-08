@@ -1,6 +1,11 @@
 import os
 import sys
 import time
+
+# Forcar UTF-8 no terminal Windows (evita UnicodeEncodeError com emojis)
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 from playwright.sync_api import sync_playwright
 
 # Setup mock key
@@ -28,33 +33,32 @@ def run_test():
         # O subagent achou esse seletor: #ctl00_ContentPlaceHolder1_txtChaveAcessoResumo
         try:
             page.fill("#ctl00_ContentPlaceHolder1_txtChaveAcessoResumo", MOCK_CHAVE)
-            print("✅ Chave preenchida.")
+            print("[OK] Chave preenchida.")
         except Exception as e:
-            print("❌ Erro ao preencher chave", e)
+            print("[ERRO] Falha ao preencher chave:", e)
             
-        print("\n⏳ Aguardando você resolver o CAPTCHA manualmente na janela do navegador.")
-        print("Quando você marcar 'Sou humano', aperte 'Continuar'.")
-        print("Esperando carregamento da próxima página...\n")
+        print("\n[AGUARDANDO] CAPTCHA: resolva na janela do navegador e clique em 'Continuar'.")
+        print("Esperando carregamento da proxima pagina (timeout: 2 min)...\n")
         
         # Aguardar ate que a página mude ou um elemento de resultado apareça
         try:
             # Espera ate o elemento de id 'conteudo' aparecer (tela do XML) ou timeout de 120s
             page.wait_for_selector("#ctl00_ContentPlaceHolder1_upResumo", timeout=120000)
-            print("✅ CAPTCHA resolvido e página navegada com sucesso!")
+            print("[OK] CAPTCHA resolvido e pagina carregada!")
             
-            # Printar uma prova de que lemos o conteudo
-            time.sleep(2) # dar um tempo pro js renderizar
+            time.sleep(2)
             resumo_texto = page.locator("#ctl00_ContentPlaceHolder1_upResumo").inner_text()
             print("=== RESUMO ENCONTRADO ===")
-            print(resumo_texto[:500] + "...")
+            print(resumo_texto[:500])
+            print("...")
             
-            # Salvar um print pra validar
             page.screenshot(path="scratch/teste_playwright_sucesso.png")
-            print("✅ Screenshot salvo na pasta scratch")
+            print("[OK] Screenshot salvo em scratch/teste_playwright_sucesso.png")
             
         except Exception as e:
-            print(f"❌ Falha ou Timeout aguardando a resolução do Captcha: {e}")
+            print(f"[ERRO] Falha ou Timeout: {e}")
             page.screenshot(path="scratch/teste_playwright_timeout.png")
+            print("[INFO] Screenshot de timeout salvo em scratch/teste_playwright_timeout.png")
             
         print("\nFechando navegador em 5 segundos...")
         time.sleep(5)
