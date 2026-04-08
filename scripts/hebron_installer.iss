@@ -1,12 +1,12 @@
 [Setup]
 AppName=HebronAutoXML
-AppVersion=2.2.0
+AppVersion=3.0.0
 AppPublisher=Hebron Contabilidade
 AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
 DefaultDirName={autopf}\HebronAutoXML
 DefaultGroupName=HebronAutoXML
 DisableProgramGroupPage=yes
-OutputBaseFilename=HebronAutoXML_v2.0_Setup
+OutputBaseFilename=HebronAutoXML_v3.0_Setup
 OutputDir=..\Output
 Compression=lzma
 SolidCompression=yes
