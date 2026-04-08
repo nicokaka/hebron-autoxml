@@ -3,9 +3,9 @@ from requests.exceptions import RequestException
 
 from src.core.sefaz_tools import descompactar_base64_zip, parse_retorno_distribuicao
 
-def _payload_nfe_chave(uf_autor: str, cnpj: str, chave: str, ambiente: str) -> str:
+def _payload_nfe_chave(cnpj: str, chave: str, ambiente: str) -> str:
     tp_amb = "2" if ambiente.lower() == "homologacao" else "1"
-    tag_uf = f"          <cUFAutor>{uf_autor}</cUFAutor>\n" if uf_autor else ""
+    # Omitted cUFAutor because it is NOT valid in schema version 1.00 (causes cStat 215)
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
   <soap12:Body>
@@ -13,7 +13,7 @@ def _payload_nfe_chave(uf_autor: str, cnpj: str, chave: str, ambiente: str) -> s
       <nfeDadosMsg>
         <distDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">
           <tpAmb>{tp_amb}</tpAmb>
-{tag_uf}          <CNPJ>{cnpj}</CNPJ>
+          <CNPJ>{cnpj}</CNPJ>
           <consChNFe>
             <chNFe>{chave}</chNFe>
           </consChNFe>
@@ -23,7 +23,7 @@ def _payload_nfe_chave(uf_autor: str, cnpj: str, chave: str, ambiente: str) -> s
   </soap12:Body>
 </soap12:Envelope>"""
 
-def consultar_nfe_chave(cert_path: str, key_path: str, uf_autor: str, cnpj: str, chave: str, ambiente: str) -> dict:
+def consultar_nfe_chave(cert_path: str, key_path: str, cnpj: str, chave: str, ambiente: str) -> dict:
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     
@@ -37,7 +37,7 @@ def consultar_nfe_chave(cert_path: str, key_path: str, uf_autor: str, cnpj: str,
         'SOAPAction': 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse'
     }
     
-    payload = _payload_nfe_chave(uf_autor, cnpj, chave, ambiente)
+    payload = _payload_nfe_chave(cnpj, chave, ambiente)
     
     try:
         resp = requests.post(url, data=payload, headers=headers, cert=(cert_path, key_path), verify=False, timeout=25)

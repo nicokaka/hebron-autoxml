@@ -144,9 +144,7 @@ def iniciar_download_sefaz(
                     registros_relatorio.append({'chave': chave, 'status': 'certificado_expirado', 'observacao': str(e), 'arquivo_xml': ''})
                     break
                     
-                uf_autor = chave[:2]
-                
-                resp = consultar_nfe_chave(cert_path, key_path, uf_autor, cnpj_base, chave, ambiente)
+                resp = consultar_nfe_chave(cert_path, key_path, cnpj_base, chave, ambiente)
                 
                 if resp['status'] == 'sucesso_xml':
                     caminho_xml = os.path.join(sub_pasta_xml, f"NFe_{chave}.xml")
