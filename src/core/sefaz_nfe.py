@@ -11,7 +11,7 @@ def _payload_nfe_chave(uf_autor: str, cnpj: str, chave: str, ambiente: str) -> s
   <soap12:Body>
     <nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">
       <nfeDadosMsg>
-        <distDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01">
+        <distDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">
           <tpAmb>{tp_amb}</tpAmb>
 {tag_uf}          <CNPJ>{cnpj}</CNPJ>
           <consChNFe>
