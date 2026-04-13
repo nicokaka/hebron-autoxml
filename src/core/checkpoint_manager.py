@@ -1,11 +1,31 @@
 import os
 import json
 import shutil
+import time as _time
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".HebronAutoXML")
+CACHE_XML_DIR = os.path.join(CACHE_DIR, "xml_cache")
 _RATE_LIMIT_HOURS = 1
+_CACHE_MAX_AGE_DAYS = 30
+
+
+def cleanup_old_cache(max_age_days: int = _CACHE_MAX_AGE_DAYS):
+    """Remove XMLs do cache local com mais de max_age_days dias."""
+    if not os.path.isdir(CACHE_XML_DIR):
+        return
+    cutoff = _time.time() - (max_age_days * 86400)
+    removed = 0
+    try:
+        for f in os.listdir(CACHE_XML_DIR):
+            fp = os.path.join(CACHE_XML_DIR, f)
+            if os.path.isfile(fp) and os.path.getmtime(fp) < cutoff:
+                os.remove(fp)
+                removed += 1
+    except Exception:
+        pass
+    return removed
 
 
 def _path(cnpj: str, ambiente: str) -> str:
@@ -40,10 +60,18 @@ def get_downloaded(cnpj: str, ambiente: str) -> Dict[str, dict]:
 
 
 def mark_downloaded(cnpj: str, ambiente: str, chave: str, arquivo_path: str):
-    """Registra uma chave como baixada com sucesso, salvando o caminho do arquivo."""
+    """Registra uma chave como baixada com sucesso, salvando o caminho do arquivo e criando cache."""
+    os.makedirs(CACHE_XML_DIR, exist_ok=True)
+    cache_path = os.path.join(CACHE_XML_DIR, f"{chave}.xml")
+    try:
+        shutil.copy2(arquivo_path, cache_path)
+    except Exception:
+        pass
+
     data = _load(cnpj, ambiente)
     data['downloaded'][chave] = {
         'arquivo': arquivo_path,
+        'cache': cache_path,
         'baixado_em': datetime.now().isoformat()
     }
     _save_data(cnpj, ambiente, data)
@@ -80,14 +108,24 @@ def clear_blocked(cnpj: str, ambiente: str):
 def try_recover_xml(chave: str, info: dict, dest_folder: str) -> Optional[str]:
     """
     Tenta copiar o XML baixado anteriormente para a nova pasta de saída.
-    Retorna o nome do arquivo se bem-sucedido, None se o arquivo original não existir.
+    Retorna o nome do arquivo se bem-sucedido, None se o arquivo original e o cache não existirem.
     """
     arquivo_original = info.get('arquivo', '')
+    arquivo_cache = info.get('cache', os.path.join(CACHE_XML_DIR, f"{chave}.xml"))
+    
+    src_path = None
     if arquivo_original and os.path.isfile(arquivo_original):
-        dest_name = os.path.basename(arquivo_original)
+        src_path = arquivo_original
+    elif arquivo_cache and os.path.isfile(arquivo_cache):
+        src_path = arquivo_cache
+        
+    if src_path:
+        dest_name = os.path.basename(arquivo_original) if arquivo_original else f"NFe_{chave}.xml"
+        if not dest_name or dest_name == ".xml":
+            dest_name = f"NFe_{chave}.xml"
         dest_path = os.path.join(dest_folder, dest_name)
         try:
-            shutil.copy2(arquivo_original, dest_path)
+            shutil.copy2(src_path, dest_path)
             return dest_name
         except Exception:
             pass

@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from datetime import datetime
 import customtkinter as ctk
+import src.core.config_manager as config_mgr
 
 from src.core.offline_job import iniciar_extracao_hibrida
 from src.core.online_job import iniciar_download_sefaz
@@ -45,6 +46,9 @@ class HebronApp(ctk.CTk):
         self.on_pfx_path = tk.StringVar()
         self.on_senha = tk.StringVar()
         self.on_out_path = tk.StringVar()
+        
+        cfg = config_mgr.get_captcha_config()
+        self.on_captcha_api_key = ctk.StringVar(value=cfg["captcha_api_key"])
         
         self.off_xml_base = tk.StringVar()
 
@@ -110,12 +114,17 @@ class HebronApp(ctk.CTk):
         self.row_pfx = self._criar_input_row("🔐 Certificado (.pfx)", self.on_pfx_path, self._cmd_buscar_pfx)
         self.row_xml = self._criar_input_row("📁 Pasta Local (XMLs)", self.off_xml_base, self._cmd_buscar_xml_base)
         
-        # Row Especial para Senha
+        # Row Especial para Senha e Captcha API
         self.row_senha = ctk.CTkFrame(self.frm_card, fg_color=THEME["bg_card"])
         self.row_senha.pack(fill="x", padx=20, pady=10)
         
-        ctk.CTkLabel(self.row_senha, text="🔑 Senha", width=180, anchor="w", font=ctk.CTkFont(weight="bold"), text_color=THEME["text_primary"]).pack(side="left")
-        ctk.CTkEntry(self.row_senha, textvariable=self.on_senha, show="•", fg_color=THEME["bg_input"], border_width=1, width=150).pack(side="left", padx=(0, 10))
+        # Senha
+        ctk.CTkLabel(self.row_senha, text="🔑 Senha", width=70, anchor="w", font=ctk.CTkFont(weight="bold"), text_color=THEME["text_primary"]).pack(side="left")
+        ctk.CTkEntry(self.row_senha, textvariable=self.on_senha, show="•", fg_color=THEME["bg_input"], border_width=1, width=120).pack(side="left", padx=(0, 20))
+        
+        # API Key Captcha
+        ctk.CTkLabel(self.row_senha, text="🛡️ 2Captcha/CapSolver API Key (Opcional):", anchor="w", text_color=THEME["text_secondary"], font=ctk.CTkFont(size=11)).pack(side="left")
+        ctk.CTkEntry(self.row_senha, textvariable=self.on_captcha_api_key, fg_color=THEME["bg_input"], border_width=1, show="*", width=200).pack(side="left", padx=(5, 0))
         
         self.row_out = self._criar_input_row("📦 Pasta de Saída", self.on_out_path, self._cmd_buscar_out)
 
@@ -271,6 +280,14 @@ class HebronApp(ctk.CTk):
         pwd = self.on_senha.get()
         out = self.on_out_path.get()
         amb = "producao" # Travado FSist
+        api_key = self.on_captcha_api_key.get().strip()
+        
+        if api_key:
+            # Detecta provedor pela estrutura simples da key (ajuste como achar melhor ou trave em 2captcha)
+            prov = "capsolver" if api_key.startswith("CAP-") else "2captcha"
+            config_mgr.save_captcha_config(prov, api_key, True)
+        else:
+            config_mgr.save_captcha_config("2captcha", "", False)
         
         if not all([ex, pfx, pwd, out]):
             self._log("[ERRO] Preencha: Excel, Certificado PFX, Senha e Pasta de Saída.")
@@ -279,7 +296,7 @@ class HebronApp(ctk.CTk):
         self._travar_ui()
         self._log("Iniciando Módulo SEFAZ Online...")
         
-        t = threading.Thread(target=self._task_online, args=(ex, pfx, pwd, out, amb))
+        t = threading.Thread(target=self._task_online, args=(ex, pfx, pwd, out, amb, api_key))
         t.daemon = True
         t.start()
 
@@ -321,7 +338,7 @@ class HebronApp(ctk.CTk):
         )
         return resultado
 
-    def _task_online(self, ex, pfx, pwd, out, amb):
+    def _task_online(self, ex, pfx, pwd, out, amb, api_key):
         try:
             cb = lambda m, a=None, t=None: self.after(0, self._atualizar_progresso, m, a, t)
             # on_alerta_saidas roda na main thread via after() para poder abrir MessageBox
@@ -336,7 +353,7 @@ class HebronApp(ctk.CTk):
                 ev.wait(timeout=120)  # aguarda resposta do usuário por até 2 min
                 return alerta_resultado[0]
 
-            res = iniciar_download_sefaz(ex, pfx, pwd, out, amb, on_progresso=cb, on_alerta_saidas=alerta_cb)
+            res = iniciar_download_sefaz(ex, pfx, pwd, out, amb, on_progresso=cb, on_alerta_saidas=alerta_cb, captcha_api_key=api_key)
             self.after(0, self._on_sucesso, res)
         except Exception as e:
             self.after(0, self._on_erro, str(e))

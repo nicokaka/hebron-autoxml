@@ -1,11 +1,10 @@
 """
 SefazPortalScraper — Download de XMLs via Portal Público da SEFAZ (Playwright)
 
-Estratégia: Modo SEMI-AUTOMÁTICO (headed).
-- O robô navega, digita as chaves e extrai os dados da página.
-- O USUÁRIO resolve o hCaptcha manualmente quando solicitado (~10 seg).
+Estratégia: Modo HÍBRIDO (Manual ou API).
+- Sem API Key: O robô abre janela (headed) e espera o usuário resolver (~10 seg).
+- Com API Key (2Captcha/Capsolver): O robô resolve via IA em background (headless).
 - Sem rate-limit de WebService: 300 chaves em ~30 min vs 15h no fallback.
-- Custo: R$ 0.
 
 Ciclo de vida:
   1. Abre Chromium/Edge headed (janela visível)
@@ -19,6 +18,8 @@ import os
 import time
 import logging
 from typing import Callable, Dict
+
+from src.core.captcha_solver import CaptchaSolver, CaptchaSolverError
 
 log = logging.getLogger(__name__)
 
@@ -86,12 +87,18 @@ class SefazPortalScraper:
         # resultados: {"chave44digs": "sucesso_xml" | "erro_xxx", ...}
     """
 
-    def __init__(self, on_progresso: Callable = None):
+    def __init__(self, on_progresso: Callable = None, captcha_api_key: str = ""):
         self._on_prog = on_progresso or (lambda msg: None)
         self._browser = None
         self._page    = None
         self._pw      = None
-
+        self.captcha_api_key = captcha_api_key.strip()
+        self._solver = None
+        
+        if self.captcha_api_key:
+            prov = "capsolver" if self.captcha_api_key.startswith("CAP-") else "2captcha"
+            self._solver = CaptchaSolver(api_key=self.captcha_api_key, provider=prov)
+            
     # ── API Pública ──────────────────────────────────────────────────────────
 
     def baixar_xmls(
@@ -117,10 +124,14 @@ class SefazPortalScraper:
         self._on_prog(
             f"[Portal SEFAZ] Abrindo navegador para {total} chave(s)..."
         )
-        self._on_prog(
-            "[Portal SEFAZ] ATENCAO: Uma janela do navegador vai abrir. "
-            "Resolva o captcha quando solicitado e NAO feche a janela."
-        )
+        
+        if self._solver:
+            self._on_prog("[Portal SEFAZ] Modo Automático: Captchas serão resolvidos via API.")
+        else:
+            self._on_prog(
+                "[Portal SEFAZ] ATENCAO: Uma janela do navegador vai abrir. "
+                "Resolva o captcha quando solicitado e NAO feche a janela."
+            )
 
         try:
             self._iniciar_browser()
@@ -158,11 +169,18 @@ class SefazPortalScraper:
         for tentativa in range(1, _MAX_RETRIES_CAPTCHA + 1):
             try:
                 status = self._tentar_consulta(chave, pasta_saida, tentativa)
-                if status != "captcha_invalido":
+                if status not in ("captcha_invalido", "erro_captcha_api"):
                     return status
-                # Captcha inválido → recarregar e tentar de novo
+
+                # Se for falha da API, tenta só mais uma vez (evita loop em erro de saldo)
+                if status == "erro_captcha_api" and tentativa >= 2:
+                    return status
+
+                motivo = "Site rejeitou token" if status == "captcha_invalido" else "Falha temporaria na API"
+                aviso_custo = " (gastando 1 novo credits/solve)" if self._solver and status == "captcha_invalido" else ""
+                
                 self._on_prog(
-                    f"[Portal SEFAZ]   [!] Captcha invalido (tentativa {tentativa}/{_MAX_RETRIES_CAPTCHA}). "
+                    f"[Portal SEFAZ]   [!] {motivo}{aviso_custo}. Tentativa {tentativa}/{_MAX_RETRIES_CAPTCHA}. "
                     "Recarregando pagina para nova tentativa..."
                 )
                 time.sleep(1)
@@ -189,12 +207,46 @@ class SefazPortalScraper:
         )
         input_el.fill(chave)
 
-        # ── 3. Instruir o usuário ──
+        # ── 3. Lidar com Captcha ──
         msg_tentativa = f" (tentativa {tentativa})" if tentativa > 1 else ""
-        self._on_prog(
-            f"[Portal SEFAZ]   [CAPTCHA{msg_tentativa}] Resolva na janela do navegador "
-            "e clique em 'Continuar'. Aguardando ate 3 minutos..."
-        )
+        
+        if self._solver:
+            self._on_prog(f"[Portal SEFAZ]   [CAPTCHA{msg_tentativa}] Resolvendo automaticamente...")
+            try:
+                # O hCaptcha wrapper geralmente injeta os inputs hidden na página
+                sitekey_el = self._page.wait_for_selector('.h-captcha', timeout=5000)
+                sitekey = sitekey_el.get_attribute('data-sitekey')
+                
+                if not sitekey:
+                    raise Exception("Sitekey não encontrado no HTML (data-sitekey)")
+                    
+                token = self._solver.resolver_hcaptcha(sitekey, self._page.url)
+                
+                # Injeta token no formulário usando arg-passing seguro
+                self._page.evaluate('''
+                    (t) => {
+                        const h = document.querySelector('[name="h-captcha-response"]');
+                        const g = document.querySelector('[name="g-recaptcha-response"]');
+                        if (h) h.value = t;
+                        if (g) g.value = t;
+                    }
+                ''', token)
+                
+                # Submete pelo botão Continuar
+                self._page.click(_SEL_BTN_CONTINUAR)
+                
+            except CaptchaSolverError as e:
+                self._on_prog(f"[Portal SEFAZ]   ⚠️ Erro na API do Captcha: {e}")
+                return "erro_captcha_api"
+            except Exception as e:
+                self._on_prog(f"[Portal SEFAZ]   ⚠️ Erro ao injetar token: {e}")
+                return "erro_captcha_api"
+        else:
+            # Modo manual: Pede para o usuário resolver
+            self._on_prog(
+                f"[Portal SEFAZ]   [CAPTCHA{msg_tentativa}] Resolva na janela do navegador "
+                "e clique em 'Continuar'. Aguardando ate 3 minutos..."
+            )
 
         # ── 4. Aguardar resultado pós-captcha ──────────────────────────────
         # ESTRATÉGIA CORRETA: aguardar uma navegação/reload na mesma URL
@@ -227,7 +279,7 @@ class SefazPortalScraper:
                         t.toLowerCase().includes('tente novamente')) return true;
                     return false;
                 }""",
-                timeout=_TIMEOUT_CAPTCHA_MS,
+                timeout=_TIMEOUT_CAPTCHA_MS if not self._solver else 30_000,
             )
         except Exception:
             self._capturar_screenshot(chave, "captcha_timeout")
@@ -308,21 +360,24 @@ class SefazPortalScraper:
         from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().start()
 
+        # Se usar API de captcha, pode rodar invisível; caso contrário, precisa de header.
+        headless_mode = bool(self._solver)
+        
         # Tenta usar o Microsoft Edge instalado no Windows (sem download extra).
         # Se não tiver, usa o Chromium embarcado do Playwright.
         try:
             self._browser = self._pw.chromium.launch(
                 channel="msedge",
-                headless=False,
+                headless=headless_mode,
                 args=["--disable-blink-features=AutomationControlled"],
             )
-            self._on_prog("[Portal SEFAZ] Usando Microsoft Edge.")
+            self._on_prog(f"[Portal SEFAZ] Usando Microsoft Edge (Headless: {headless_mode}).")
         except Exception:
             self._browser = self._pw.chromium.launch(
-                headless=False,
+                headless=headless_mode,
                 args=["--disable-blink-features=AutomationControlled"],
             )
-            self._on_prog("[Portal SEFAZ] Usando Chromium.")
+            self._on_prog(f"[Portal SEFAZ] Usando Chromium (Headless: {headless_mode}).")
 
         context = self._browser.new_context(
             viewport={"width": 1280, "height": 800},

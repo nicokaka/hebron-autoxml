@@ -42,7 +42,7 @@ def test_task_online_calls_after(mock_iniciar, app_instance):
     Checa se _task_online usa self.after e roda normalmente
     """
     app_instance.after = MagicMock()
-    app_instance._task_online("ex", "pfx", "pwd", "out", "amb")
+    app_instance._task_online("ex", "pfx", "pwd", "out", "amb", "")
     
     # Callback deve registrar iniciar_download_sefaz
     mock_iniciar.assert_called_once()

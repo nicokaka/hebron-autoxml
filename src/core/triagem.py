@@ -33,7 +33,8 @@ def classificar_entrada_saida(chaves_nfe: list, chaves_cte: list, cnpj_base: str
     entradas, saidas = [], []
 
     for chave in chaves_nfe:
-        # Posições 6–13 (índices 6:14) = CNPJ raiz do emitente (8 dígitos)
+        # Posições 6–19 = CNPJ completo (14 dígitos). Pegamos apenas [6:14] = CNPJ raiz
+        # (8 primeiros dígitos) para cobrir Matriz + Filiais do mesmo grupo empresarial.
         cnpj_raiz_emitente = chave[6:14]
         if cnpj_raiz_emitente == cnpj_raiz_cert:
             saidas.append(chave)   # Emitida pelo próprio cliente — não manifesta

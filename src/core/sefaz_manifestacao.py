@@ -4,7 +4,7 @@ Endpoint: NFeRecepcaoEvento4 (Ambiente Nacional)
 
 Fluxo:
   1. Gera XML <evento> para cada chave
-  2. Assina cada <evento> individualmente (XMLDSig, RSA-SHA1, C14N 1.0)
+  2. Assina cada <evento> individualmente (XMLDSig, RSA-SHA1, Exclusive C14N)
   3. Empacota em lotes de até 20 eventos por requisição SOAP 1.2
   4. Parseia a resposta por chave:
        cStat 135 = Registrado com sucesso
@@ -35,6 +35,10 @@ def _dump_diagnostico_manif(lote_idx: int, payload: str, status_code: int, respo
     """Grava em arquivo o XML enviado e a resposta crua da SEFAZ para debugging."""
     try:
         os.makedirs(_DIAG_DIR, exist_ok=True)
+        # Trunca se > 10MB para evitar crescimento infinito
+        if os.path.exists(_DIAG_FILE_MANIF) and os.path.getsize(_DIAG_FILE_MANIF) > 10 * 1024 * 1024:
+            with open(_DIAG_FILE_MANIF, 'w', encoding='utf-8') as f:
+                f.write("[LOG TRUNCADO — arquivo excedeu 10MB]\n")
         with open(_DIAG_FILE_MANIF, "a", encoding="utf-8") as f:
             ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"\n{'='*80}\n")
@@ -48,7 +52,7 @@ _NS_NFE   = "http://www.portalfiscal.inf.br/nfe"
 _NS_WSDL  = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4"
 _NS_SOAP  = "http://www.w3.org/2003/05/soap-envelope"
 _NS_DSIG  = "http://www.w3.org/2000/09/xmldsig#"
-_C14N_ALG = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+_C14N_ALG = "http://www.w3.org/2001/10/xml-exc-c14n#"
 
 _URL_PROD = "https://www.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx"
 _URL_HOM  = "https://hom.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx"
@@ -91,7 +95,7 @@ def _gerar_xml_evento(cnpj: str, chave: str, tp_amb: str) -> str:
 
 def _assinar_evento(xml_evento_str: str, cert_pem: bytes, key_pem: bytes) -> str:
     """
-    Assina o bloco <evento> usando RSA-SHA1 / C14N 1.0 SEM prefixo 'ds:'.
+    Assina o bloco <evento> usando RSA-SHA1 / Exclusive C14N SEM prefixo 'ds:'.
 
     A SEFAZ rejeita cStat 404 ("Uso de prefixo de namespace não permitido")
     quando detecta <ds:Signature>. Por isso, construímos a assinatura
@@ -101,7 +105,7 @@ def _assinar_evento(xml_evento_str: str, cert_pem: bytes, key_pem: bytes) -> str
     Specs SEFAZ (Evento versao 1.00):
       - Digest:           SHA-1
       - Assinatura:       RSA-SHA1
-      - Canonicalização:  C14N 1.0 (sem comentários)
+      - Canonicalização:  Exclusive C14N (xml-exc-c14n#)
       - Posição:          <Signature> dentro de <evento>, após </infEvento>
     """
     parser = etree.XMLParser(remove_blank_text=True)
@@ -111,7 +115,7 @@ def _assinar_evento(xml_evento_str: str, cert_pem: bytes, key_pem: bytes) -> str
     id_ref = inf_evento.get("Id")
 
     # ── A: Digest SHA-1 do <infEvento> canonicalizado ──
-    c14n_inf = etree.tostring(inf_evento, method="c14n", exclusive=False, with_comments=False)
+    c14n_inf = etree.tostring(inf_evento, method="c14n", exclusive=True, with_comments=False)
     digest_b64 = base64.b64encode(hashlib.sha1(c14n_inf).digest()).decode()
 
     # ── B: Montar <SignedInfo> SEM prefixo ds: ──
@@ -132,7 +136,7 @@ def _assinar_evento(xml_evento_str: str, cert_pem: bytes, key_pem: bytes) -> str
 
     # ── C: Canonicalizar e assinar <SignedInfo> com RSA-SHA1 ──
     signed_info_el = etree.fromstring(signed_info_xml.encode("utf-8"), parser)
-    c14n_si = etree.tostring(signed_info_el, method="c14n", exclusive=False, with_comments=False)
+    c14n_si = etree.tostring(signed_info_el, method="c14n", exclusive=True, with_comments=False)
 
     private_key = serialization.load_pem_private_key(key_pem, password=None)
     raw_sig = private_key.sign(c14n_si, padding.PKCS1v15(), hashes.SHA1())
@@ -349,6 +353,12 @@ def enviar_manifestacao(
                 f"[Manifestação] Lote {idx_lote + 1}: {sucessos}/{len(lote)} registrados "
                 f"(135=ok, 573=duplicidade inofensiva)."
             )
+            
+            # Logar individualmente as chaves que falharam para clareza
+            if sucessos < len(lote):
+                for ch_lote, cstat_lote in resultado_lote.items():
+                    if cstat_lote not in ("135", "573"):
+                        on_progresso(f"[Manifestação] ⚠️ Falha na chave {ch_lote[:20]}...: cStat {cstat_lote}")
         except Exception as e:
             on_progresso(f"[Manifestação] ⚠️ Erro de rede no lote {idx_lote + 1}: {e}")
 

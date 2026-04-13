@@ -23,7 +23,7 @@ def test_assinar_evento(cert_fake_pem):
     assert "<Signature" in xml_assinado
     assert 'Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"' in xml_assinado
     assert 'Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"' in xml_assinado
-    assert 'Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"' in xml_assinado
+    assert 'Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"' in xml_assinado
     assert "<SignatureValue>" in xml_assinado
     assert "<X509Certificate>" in xml_assinado
     assert "<DigestValue>" in xml_assinado

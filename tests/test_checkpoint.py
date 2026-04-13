@@ -7,7 +7,9 @@ import src.core.checkpoint_manager as cp
 
 @pytest.fixture
 def setup_checkpoint(mock_temp_dir):
-    with patch("src.core.checkpoint_manager.CACHE_DIR", mock_temp_dir):
+    xml_cache = os.path.join(mock_temp_dir, "xml_cache")
+    with patch("src.core.checkpoint_manager.CACHE_DIR", mock_temp_dir), \
+         patch("src.core.checkpoint_manager.CACHE_XML_DIR", xml_cache):
         yield mock_temp_dir
 
 def test_mark_and_get_downloaded(setup_checkpoint):
@@ -66,3 +68,35 @@ def test_try_recover_xml(setup_checkpoint):
 def test_try_recover_xml_missing(setup_checkpoint):
     rec_filename = cp.try_recover_xml("CHAVE1", {"arquivo": "/path/missing.xml"}, setup_checkpoint)
     assert rec_filename is None
+
+def test_try_recover_xml_from_cache(setup_checkpoint):
+    # Simula que o arquivo original não existe, mas existe no cache
+    xml_cache = os.path.join(setup_checkpoint, "xml_cache")
+    os.makedirs(xml_cache, exist_ok=True)
+    cache_path = os.path.join(xml_cache, "CHAVE2.xml")
+    with open(cache_path, "w") as f:
+        f.write("<fake_cache></fake_cache>")
+    
+    nova_pasta = os.path.join(setup_checkpoint, "nova_pasta2")
+    os.makedirs(nova_pasta, exist_ok=True)
+    
+    rec_filename = cp.try_recover_xml("CHAVE2", {"arquivo": "/path/missing.xml", "cache": cache_path}, nova_pasta)
+    
+    # O fallback_name é f"NFe_{chave}.xml" (ou o basename do cache, dependendo da ordem)
+    # Pela nossa lógica, dest_name deveria ser NFe_CHAVE2.xml ou basename do original
+    # O basename do arquivo = missing.xml -> na vdd a cópia vai como missing.xml (pq original tem valor)
+    # Mas no nosso código: dest_name = os.path.basename(arquivo_original) if arquivo_original else f"NFe_{chave}.xml"
+    # Assim, rec_filename será 'missing.xml'.
+    assert rec_filename == "missing.xml"
+    assert os.path.exists(os.path.join(nova_pasta, "missing.xml"))
+
+def test_mark_downloaded_creates_cache(setup_checkpoint):
+    xml_path = os.path.join(setup_checkpoint, "NFe_CHAVE3.xml")
+    with open(xml_path, "w") as f:
+        f.write("<test></test>")
+        
+    cp.mark_downloaded("123", "producao", "CHAVE3", xml_path)
+    
+    # O arquivo deve ter sido copiado para CACHE_XML_DIR
+    cache_path = os.path.join(setup_checkpoint, "xml_cache", "CHAVE3.xml")
+    assert os.path.exists(cache_path)

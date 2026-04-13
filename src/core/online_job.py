@@ -17,7 +17,8 @@ from src.core.sefaz_manifestacao import enviar_manifestacao
 from src.core.portal_scraper import SefazPortalScraper, PlaywrightIndisponivel
 from src.core.checkpoint_manager import (
     get_downloaded, mark_downloaded, mark_blocked,
-    get_cooldown_remaining, clear_blocked, try_recover_xml
+    get_cooldown_remaining, clear_blocked, try_recover_xml,
+    cleanup_old_cache
 )
 from src.io_reports.report_writer import gerar_relatorio_excel
 from src.io_reports.zipper import gerar_zip_arquivos
@@ -31,6 +32,7 @@ def iniciar_download_sefaz(
     ambiente: str = "producao",
     on_progresso: Callable = None,
     on_alerta_saidas: Callable = None,   # callback para popup de alerta vermelho
+    captcha_api_key: str = "",
 ) -> dict:
     """
     Orquestra o download de XMLs da SEFAZ em 5 passos:
@@ -47,6 +49,9 @@ def iniciar_download_sefaz(
     """
     if not on_progresso:
         on_progresso = lambda msg, atual=None, total=None: None
+
+    # ─── Limpeza de cache antigo ────────────────────────────────────────────
+    cleanup_old_cache()
 
     # ─── Validação do Certificado ────────────────────────────────────────────
     on_progresso("Validando Certificado Digital (A1)...")
@@ -178,7 +183,7 @@ def iniciar_download_sefaz(
             # ═══════════════════════════════════════════════════════════════════
             on_progresso("─" * 50)
             uf_autor_nsu, uf_raw = cert_mgr.get_uf()
-            on_progresso(f"🔍 [Passo 3] distNSU — UF: {uf_autor_nsu or 'Não encontrada (omitida)'}. Varrendo lotes...")
+            on_progresso(f"🔍 [Passo 3] distNSU — UF certificado: '{uf_raw}' → IBGE: {uf_autor_nsu or 'Não encontrada (tag omitida)'}. Varrendo lotes...")
 
             ult_nsu = get_cached_nsu(cnpj_base, ambiente)
             on_progresso(f"   📌 ultNSU recuperado do cache: {ult_nsu}")
@@ -212,26 +217,27 @@ def iniciar_download_sefaz(
                                 caminho_xml = os.path.join(sub_pasta_xml, f"NFe_{chave_extraida}.xml")
                                 with open(caminho_xml, 'w', encoding='utf-8') as f:
                                     f.write(xml_str)
+                                mark_downloaded(cnpj_base, ambiente, chave_extraida, caminho_xml)
                                 registros_relatorio.append({'chave': chave_extraida, 'status': 'baixada_ok', 'observacao': 'Sucesso via distNSU (Lote).', 'arquivo_xml': os.path.basename(caminho_xml)})
                                 baixadas_com_sucesso += 1
                                 total_processadas += 1
                                 chaves_nfe_pendentes.remove(chave_extraida)
                                 encontradas_neste_lote += 1
-                        except Exception:
-                            pass
+                        except Exception as e_xml:
+                            on_progresso(f"[Passo 3] ⚠️ Erro ao processar doc NSU {doc.get('NSU','?')}: {e_xml}")
 
                 if encontradas_neste_lote > 0:
                     lotes_sem_match = 0
                 else:
                     lotes_sem_match += 1
 
-                if lotes_sem_match >= 50:
-                    on_progresso("[Passo 3] ⚡ 50 lotes sem match — encerrando varredura.")
+                if lotes_sem_match >= 150:
+                    on_progresso("[Passo 3] ⚡ 150 lotes consecutivos sem match — encerrando varredura.")
                     break
 
                 pct = int((int(ult_nsu) / max(int(max_nsu), 1)) * 100)
                 msg_enc = f" ✅ +{encontradas_neste_lote}" if encontradas_neste_lote else ""
-                on_progresso(f"[Passo 3] NSU {ult_nsu}/{max_nsu} ({pct}%) | {nfes_no_lote} NFes | Pendentes: {len(chaves_nfe_pendentes)}{msg_enc}")
+                on_progresso(f"[Passo 3] NSU {ult_nsu}/{max_nsu} ({pct}%) | {nfes_no_lote} NFes | Pendentes: {len(chaves_nfe_pendentes)}{msg_enc}", total_processadas, total_validas)
                 tentativas += 1
                 time.sleep(0.5)
 
@@ -295,7 +301,7 @@ def iniciar_download_sefaz(
                         f"[Passo 4] 🌐 Portal SEFAZ (Playwright): "
                         f"{len(chaves_fallback)} chave(s) — sem rate-limit."
                     )
-                    scraper = SefazPortalScraper(on_progresso=on_progresso)
+                    scraper = SefazPortalScraper(on_progresso=on_progresso, captcha_api_key=captcha_api_key)
                     resultados_pw = scraper.baixar_xmls(chaves_fallback, sub_pasta_xml)
 
                     # Processar resultados do Playwright

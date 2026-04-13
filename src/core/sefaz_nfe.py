@@ -13,6 +13,10 @@ def _dump_diagnostico(chave: str, payload: str, status_code: int, response_text:
     """Grava em arquivo o XML enviado e a resposta crua da SEFAZ para debugging."""
     try:
         os.makedirs(_DIAG_DIR, exist_ok=True)
+        # Trunca se > 10MB para evitar crescimento infinito
+        if os.path.exists(_DIAG_FILE) and os.path.getsize(_DIAG_FILE) > 10 * 1024 * 1024:
+            with open(_DIAG_FILE, 'w', encoding='utf-8') as f:
+                f.write("[LOG TRUNCADO — arquivo excedeu 10MB]\n")
         with open(_DIAG_FILE, "a", encoding="utf-8") as f:
             ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"\n{'='*80}\n")

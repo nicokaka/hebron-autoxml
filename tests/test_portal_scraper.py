@@ -14,6 +14,7 @@ def _make_scraper_mocked():
     Evita importar playwright nos testes.
     """
     from src.core.portal_scraper import SefazPortalScraper
+    from src.core.captcha_solver import CaptchaSolverError
 
     logs = []
     scraper = SefazPortalScraper(on_progresso=lambda m: logs.append(m))
@@ -145,6 +146,65 @@ def test_tentar_consulta_sucesso_xml(tmp_path):
 
     assert status == "sucesso_xml"
     dl_mock.save_as.assert_called_once()
+
+def test_tentar_consulta_auto_captcha(tmp_path):
+    """Quando tem api_key, deve chamar solver.resolver_hcaptcha e injetar token."""
+    from src.core.portal_scraper import SefazPortalScraper
+    
+    logs = []
+    scraper = SefazPortalScraper(on_progresso=lambda m: logs.append(m), captcha_api_key="12345")
+    
+    page_mock = MagicMock()
+    scraper._page = page_mock
+    scraper._browser = MagicMock()
+    scraper._pw = MagicMock()
+    
+    # Mock do CaptchaSolver interno
+    solver_mock = MagicMock()
+    solver_mock.resolver_hcaptcha.return_value = "TOKEN_FALSO"
+    scraper._solver = solver_mock
+    
+    # Simular wait_for_selector retornando um elemento com data-sitekey
+    el_mock = MagicMock()
+    el_mock.get_attribute.return_value = "SITEKEY_123"
+    page_mock.wait_for_selector.return_value = el_mock
+    
+    # Simular sucesso_resumo pós injeção
+    page_mock.wait_for_function.return_value = None
+    resumo_locator = MagicMock()
+    resumo_locator.inner_text.return_value = "Situação Atual: Autorizada"
+    resumo_locator.inner_html.return_value = "<div>ok</div>"
+    page_mock.locator.return_value = resumo_locator
+    page_mock.query_selector.return_value = None
+    
+    status = scraper._tentar_consulta(CHAVE_TESTE, str(tmp_path), tentativa=1)
+    
+    solver_mock.resolver_hcaptcha.assert_called_once_with("SITEKEY_123", page_mock.url)
+    page_mock.evaluate.assert_called_once()
+    assert "TOKEN_FALSO" == page_mock.evaluate.call_args[0][1]
+    assert status == "sucesso_resumo"
+    
+def test_tentar_consulta_auto_captcha_erro_api(tmp_path):
+    """Quando a API de captcha falha, deve retornar erro_captcha_api."""
+    from src.core.portal_scraper import SefazPortalScraper
+    from src.core.captcha_solver import CaptchaSolverError
+    
+    logs = []
+    scraper = SefazPortalScraper(on_progresso=lambda m: logs.append(m), captcha_api_key="12345")
+    page_mock = MagicMock()
+    scraper._page = page_mock
+    
+    solver_mock = MagicMock()
+    solver_mock.resolver_hcaptcha.side_effect = CaptchaSolverError("Zero balance")
+    scraper._solver = solver_mock
+    
+    el_mock = MagicMock()
+    el_mock.get_attribute.return_value = "SITEKEY_123"
+    page_mock.wait_for_selector.return_value = el_mock
+    
+    status = scraper._tentar_consulta(CHAVE_TESTE, str(tmp_path), tentativa=1)
+    
+    assert status == "erro_captcha_api"
 
 
 # ─── Teste de retry de captcha inválido ─────────────────────────────────────
